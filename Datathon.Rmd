@@ -1,0 +1,129 @@
+---
+title: "Datathon - ACTL5305"
+author: "Viswesh Narayan"
+date: "2024-09-23"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+# Load necessary libraries
+install.packages("dplyr")
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(tidyverse)
+library(readxl)
+
+```
+
+```{r}
+
+claims_data <- read_csv('/Users/visweshnarayan/Library/CloudStorage/OneDrive-UNSW/UNSW COURSE MATERIAL T3 2024/ACTL5305/Datathon/Assignment Data Download (Confidential Insurance Data)-20240921/UNSW_claims_data.csv', col_names = TRUE)
+
+earned_data <- read_csv('/Users/visweshnarayan/Library/CloudStorage/OneDrive-UNSW/UNSW COURSE MATERIAL T3 2024/ACTL5305/Datathon/Assignment Data Download (Confidential Insurance Data)-20240921/UNSW_earned_data.csv', col_names = TRUE)
+
+
+```
+
+#-------Earned Data Procedures--------#
+```{r}
+
+earned_data$pet_age_group <- cut(earned_data$pet_age_months, 
+                                 breaks = c(0, 12, 36, 72, 120, Inf), 
+                                 labels = c("Puppy/Kitten", "Young", "Adult", "Senior", "Very Senior"))
+
+```
+
+
+```{r}
+
+earned_data$owner_age_group <- cut(earned_data$owner_age_years, 
+                                   breaks = c(0, 25, 40, 60, Inf), 
+                                   labels = c("Young", "Middle-Aged", "Senior", "Elderly"))
+
+```
+
+
+```{r}
+
+earned_data$breed_risk_category <- ifelse(grepl("retriever|bulldog", earned_data$nb_breed_name_unique, ignore.case = TRUE), 
+                                          "High Risk", "Low/Moderate Risk")
+
+earned_data$multi_pet_indicator <- as.integer(earned_data$is_multi_pet_plan)
+
+
+```
+
+
+
+```{r}
+
+suburb_claim_frequency <- earned_data %>% 
+                           group_by(nb_suburb) %>% 
+                           summarise(claim_count = n())
+
+```
+
+#-------Claims Data Procedures-------#
+
+```{r}
+claims_data$claim_severity <- claims_data$claim_paid / claims_data$total_claim_amount
+
+claims_data$claim_paid_group <- cut(claims_data$claim_paid, 
+                                    breaks = c(0.00000, 100, 500, 1000, Inf), 
+                                    labels = c("Low", "Moderate", "High", "Very High"))
+
+
+```
+
+```{r}
+
+condition_frequency <- claims_data %>% 
+                       group_by(condition_category) %>% 
+                       summarise(claim_count = n())
+
+
+```
+
+
+#-----ABS - SA Dataset-------#
+
+```{r}
+ABS_ECI_T1<-read_excel('/Users/visweshnarayan/Library/CloudStorage/OneDrive-UNSW/UNSW COURSE MATERIAL T3 2024/ACTL5305/Datathon/External Datasets-20240921/ABS_SA_Data/ECONOMYANDINDUSTRY.xlsx', sheet = "Table 1")
+
+ABS_ECI_T2<-read_excel('/Users/visweshnarayan/Library/CloudStorage/OneDrive-UNSW/UNSW COURSE MATERIAL T3 2024/ACTL5305/Datathon/External Datasets-20240921/ABS_SA_Data/ECONOMYANDINDUSTRY.xlsx', sheet = "Table 2")
+```
+
+
+```{r}
+ABS_EDUEMP_T1 <-read_excel('/Users/visweshnarayan/Library/CloudStorage/OneDrive-UNSW/UNSW COURSE MATERIAL T3 2024/ACTL5305/Datathon/External Datasets-20240921/ABS_SA_Data/EDUCATIONANDEMPLOYMENT_SA2-4.xlsx', sheet = "Table 1")
+
+ABS_EDUEMP_T2<- read_excel('/Users/visweshnarayan/Library/CloudStorage/OneDrive-UNSW/UNSW COURSE MATERIAL T3 2024/ACTL5305/Datathon/External Datasets-20240921/ABS_SA_Data/EDUCATIONANDEMPLOYMENT_SA2-4.xlsx', sheet = "Table 2")
+
+
+```
+
+
+```{r}
+
+
+ABS_FC_T1 <-read_excel('/Users/visweshnarayan/Library/CloudStorage/OneDrive-UNSW/UNSW COURSE MATERIAL T3 2024/ACTL5305/Datathon/External Datasets-20240921/ABS_SA_Data/FAMILYANDCOMMUNITY_SA2-4.xlsx', sheet = "Table 1")
+
+ABS_FC_T2 <-read_excel('/Users/visweshnarayan/Library/CloudStorage/OneDrive-UNSW/UNSW COURSE MATERIAL T3 2024/ACTL5305/Datathon/External Datasets-20240921/ABS_SA_Data/FAMILYANDCOMMUNITY_SA2-4.xlsx', sheet = "Table 2")
+```
+```{r}
+ABS_IN_T1 <-read_excel('/Users/visweshnarayan/Library/CloudStorage/OneDrive-UNSW/UNSW COURSE MATERIAL T3 2024/ACTL5305/Datathon/External Datasets-20240921/ABS_SA_Data/INCOME_SA2-4.xlsx', sheet = "Table 1")
+
+ABS_IN_T2 <-read_excel('/Users/visweshnarayan/Library/CloudStorage/OneDrive-UNSW/UNSW COURSE MATERIAL T3 2024/ACTL5305/Datathon/External Datasets-20240921/ABS_SA_Data/INCOME_SA2-4.xlsx', sheet = "Table 2")
+
+
+```
+
+
