@@ -26,7 +26,7 @@ library(readxl)
 ```{r}
 claims_data <- read_csv('../data/internal/UNSW_claims_data.csv', col_names = TRUE)
 
-earned_data <- read_csv('../data/internal/UNSW_earned_data.csv', col_names = TRUE)
+earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', col_names = TRUE)
 
 ```
 
@@ -88,11 +88,6 @@ condition_frequency <- claims_data %>%
 ```
 
 # ABS-SA Dataset
-
-
-```{r}
-
-```
 
 ```{r}
 ABS_ECI_T1 <- read_excel('../data/external/ABS_SA_Data/ECONOMYANDINDUSTRY.xlsx', sheet = "Table 1")
