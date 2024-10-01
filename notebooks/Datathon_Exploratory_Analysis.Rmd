@@ -112,3 +112,70 @@ ABS_IN_T1 <- read_excel('../data/external/ABS_SA_Data/INCOME_SA2-4.xlsx', sheet 
 
 ABS_IN_T2 <- read_excel('../data/external/ABS_SA_Data/INCOME_SA2-4.xlsx', sheet = "Table 2")
 ```
+
+
+```{r}
+
+# Convert dates to proper date format
+claims_data$claim_start_date <- as.Date(claims_data$claim_start_date, format = "%Y-%m-%d")
+earned_data$nb_policy_first_inception_date <- as.Date(earned_data$nb_policy_first_inception_date, format = "%Y-%m-%d")
+
+# Check for missing values and handle them
+claims_data <- na.omit(claims_data)
+earned_data <- na.omit(earned_data)
+
+```
+
+
+```{r}
+
+# Create Season Variable: Extract month from claim start date
+claims_data$season <- month(claims_data$claim_start_date)
+
+# Categorize into seasons
+claims_data$season_category <- cut(claims_data$season, 
+                                   breaks = c(0, 3, 6, 9, 12), 
+                                   labels = c("Summer", "Autumn", "Winter", "Spring"))
+
+```
+
+
+```{r}
+
+# Count the number of claims per owner (account_id)
+claim_frequency_per_owner <- claims_data %>%
+  group_by(account_id) %>%
+  summarise(claim_count = n())
+
+# Merge back into the earned_data
+earned_data <- earned_data %>%
+  left_join(claim_frequency_per_owner, by = "account_id")
+
+# Replace NA values with 0 for owners with no claims
+earned_data$claim_count[is.na(earned_data$claim_count)] <- 0
+
+
+```
+
+
+```{r}
+ggplot(data = claims_data) +
+  geom_point(mapping = aes(x = condition_category, y = claim_paid))
+
+ggplot(data = claims_data) +
+  geom_point(mapping = aes(x = condition_category, y = total_claim_amount))
+```
+
+
+```{r}
+#For boxplot YearIncurred must be a factor
+#claims_data$tenure = as.factor(claims_data$tenure)
+ggplot(data = claims_data) +
+  geom_boxplot(mapping = aes(x = tenure, y = claim_paid))
+
+claims2_data = group_by(claims_data, tenure) %>% summarise(claims_data = mean(claim_paid))
+ggplot(data = claims2_data) +
+  geom_point(mapping = aes(y = claims_data, x = tenure))
+
+
+```
