@@ -144,16 +144,15 @@ claims_data$season_category <- cut(claims_data$season,
 
 # Count the number of claims per owner (account_id)
 claim_frequency_per_owner <- claims_data %>%
-  group_by(account_id) %>%
+  group_by(claim_id) %>%
   summarise(claim_count = n())
 
 # Merge back into the earned_data
-earned_data <- earned_data %>%
-  left_join(claim_frequency_per_owner, by = "account_id")
+#earned_data <- earned_data %>%
+#  left_join(claim_frequency_per_owner, by = "claim_id")
 
 # Replace NA values with 0 for owners with no claims
 earned_data$claim_count[is.na(earned_data$claim_count)] <- 0
-
 
 ```
 
