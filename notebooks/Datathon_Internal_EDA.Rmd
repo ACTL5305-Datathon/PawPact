@@ -1,0 +1,126 @@
+---
+title: "Datathon Internal EDA"
+author: "Helitha Dharmadasa - z5451805"
+date: "2024-10-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+## Read Data
+
+```{r}
+claims_data <- read_csv('../data/internal/UNSW_claims_data.csv', col_names = TRUE)
+
+earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', col_names = TRUE)
+```
+
+```{r}
+#Some cleaning
+#  Remove negative tenures (makes no sense)
+#  Remove 0 total claim amounts
+claims_data <- claims_data %>% filter(tenure >= 0) %>% filter(total_claim_amount > 0)
+
+earned_data <- earned_data %>% filter(tenure >= 0)
+```
+
+```{r}
+# Duplicate Claim IDs - This still needs to be dealt with
+dupe_claims <- claims_data %>%
+  group_by(claim_id) %>%
+  filter(n() > 1) %>%
+  ungroup() %>%
+  arrange(claim_id, desc(total_claim_amount))
+```
+
+
+```{r}
+# Keep only the lastest entries for each exposure
+unique_exposures <- earned_data %>%
+  arrange(desc(UW_Date)) %>%  
+  group_by(exposure_id) %>%      
+  slice(1) %>%                 
+  ungroup() 
+
+earned_data %>% distinct(exposure_id) %>% count()
+```
+
+
+```{r}
+# Get a df of unique breeds
+unique_breeds <- earned_data %>%
+  separate_rows(nb_breed_name_unique_concat, sep = ",") %>%
+  mutate(nb_breed_name_unique_concat = str_trim(nb_breed_name_unique_concat)) %>%
+  distinct(nb_breed_name_unique_concat) 
+```
+
+
+# Claims
+
+```{r}
+unique_conditions <- claims_data %>% 
+  group_by(condition_category) %>% 
+  summarise(claim_count = n())
+```
+
+```{r}
+# Using tenure was equivalent and simpler
+#claims_data <- claims_data %>%
+#  mutate(claim_month = floor_date(claim_start_date, "month"))
+
+claims_count <- claims_data %>% 
+  group_by(exposure_id, tenure) %>% 
+  summarise(claim_count = n(), .groups = 'drop')
+```
+
+```{r}
+frequency_df <- full_join(earned_data, claims_count, by = c("exposure_id", "tenure"))
+
+frequency_df <- frequency_df %>%
+  mutate(claim_count = replace_na(claim_count, 0),
+         claim_count_indicator = ifelse(claim_count > 0, 1, 0))
+```
+
+```{r}
+hist(frequency_df$claim_count_indicator) 
+hist(frequency_df$claim_count) 
+```
+
+```{r}
+#Probably select(c("exposure_id", "tenure", "total_claim_amount"))
+severity_df <- left_join(claims_data, earned_data, by = c("exposure_id", "tenure"))
+```
+
+
+```{r}
+tweedie_df <- claims_data %>% 
+  select(c("exposure_id", "tenure", "total_claim_amount")) %>%
+  full_join(earned_data, by = c("exposure_id", "tenure")) %>%
+  mutate(total_claim_amount = replace_na(total_claim_amount, 0))
+```
+
+```{r}
+#ToDo:
+#-Clean up duplicate claim_ids
+#-Create historical claims features -- past claims history allowed/useful for preds
+#-save frequency, severity, tweedie df to csv files
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
