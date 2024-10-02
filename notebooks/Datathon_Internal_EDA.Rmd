@@ -10,7 +10,9 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-library(tidyverse)
+library("tidyverse")
+library("AER")
+library("stringr")
 ```
 
 ## Read Data
@@ -28,15 +30,6 @@ earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', 
 claims_data <- claims_data %>% filter(tenure >= 0) %>% filter(total_claim_amount > 0)
 
 earned_data <- earned_data %>% filter(tenure >= 0)
-```
-
-```{r}
-# Duplicate Claim IDs - This still needs to be dealt with
-dupe_claims <- claims_data %>%
-  group_by(claim_id) %>%
-  filter(n() > 1) %>%
-  ungroup() %>%
-  arrange(claim_id, desc(total_claim_amount))
 ```
 
 
@@ -95,6 +88,39 @@ hist(frequency_df$claim_count)
 ```{r}
 #Probably select(c("exposure_id", "tenure", "total_claim_amount"))
 severity_df <- left_join(claims_data, earned_data, by = c("exposure_id", "tenure"))
+
+#total claim amount = claim Paid / contribution + excess / gst
+#167.07/0.9+100/1.1
+#claim paid = (total claim amount - excess / gst ) * contribution
+
+severity_df <- severity_df %>%
+  group_by(condition_category, exposure_id) %>%
+  mutate(excess_flag = ifelse(row_number() == 1, 1, 0)) %>%
+  ungroup()
+
+severity_df <- severity_df %>% 
+  mutate(claim_due_excess = (total_claim_amount - (nb_excess)/1.1)*(nb_contribution/100),
+         claim_due_no_excess = total_claim_amount*(nb_contribution/100)) %>%
+  arrange(claim_start_date, exposure_id, claim_id) 
+```
+
+```{r}
+# Duplicate Claim IDs - This still needs to be dealt with
+dupe_claims <- severity_df %>%
+  group_by(claim_id) %>%
+  filter(n() > 1) %>%
+  ungroup() %>%
+  arrange(claim_start_date, exposure_id, claim_id) 
+```
+
+```{r}
+severity_df %>% 
+  select(claim_status) %>%
+  distinct()
+
+# Exclude these as well
+unpaid_claims <- severity_df %>%
+  filter(str_detect(claim_status, "not_paid"))
 ```
 
 
@@ -111,6 +137,17 @@ tweedie_df <- claims_data %>%
 #-Create historical claims features -- past claims history allowed/useful for preds
 #-save frequency, severity, tweedie df to csv files
 ```
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
 
 
 
