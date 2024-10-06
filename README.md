@@ -12,3 +12,5 @@
 3. [Modeling insurance claim frequency](https://medium.com/swlh/modeling-insurance-claim-frequency-a776f3bf41dc)
 5. [Modeling insurance claim frequency with GLMs and GBMs](https://medium.com/@tongyue5848/insurance-claim-frequency-modeling-with-generalized-linear-model-and-gradient-boosting-machine-in-5f7132750171)
 6. [Modeling insurance claims data using the tweedie + GBM approach](https://medium.com/@wardarahim25/modelling-insurance-claims-data-using-the-tweedie-approach-94db8b14bfb5)
+7. [Pets in Australia: A national survey of pets and people] (https://animalmedicinesaustralia.org.au/wp-content/uploads/2022/11/AMAU008-Pet-Ownership22-Report_v1.6_WEB.pdf)
+8. 
