@@ -18,6 +18,8 @@ library(ggplot2)
 library(readr)
 library(tidyverse)
 library(readxl)
+library(caret)
+library(glmnet)
 
 ```
 
@@ -30,9 +32,170 @@ earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', 
 
 ```
 
-# Earned Data Procedures
+```{r}
+# Perform a left join on the exposure_id
+merged_data <- earned_data %>%
+  left_join(claims_data, by = "exposure_id")  # Adjust the column name as necessary
+
+# View the merged dataset
+head(merged_data)
+```
+```{r}
+# Check for duplicate exposure_id in earned_data
+earned_dupes <- earned_data %>%
+  group_by(exposure_id) %>%
+  summarise(count = n()) %>%
+  filter(count > 1)
+
+# Check for duplicate exposure_id in claims_data
+claims_dupes <- claims_data %>%
+  group_by(exposure_id) %>%
+  summarise(count = n()) %>%
+  filter(count > 1)
+
+# View the duplicates
+head(earned_dupes)
+head(claims_dupes)
+```
+
 
 ```{r}
+
+# Summarize the claims data by exposure_id (e.g., sum total claim amount)
+claims_data_summarized <- claims_data %>%
+  group_by(exposure_id) %>%
+  summarise(total_claim_amount = sum(total_claim_amount, na.rm = TRUE))
+
+# Optional: Summarize earned data by exposure_id if needed (e.g., latest UW_Date)
+earned_data_summarized <- earned_data %>%
+  group_by(exposure_id) %>%
+  summarise(latest_UW_Date = max(UW_Date), earned_units = sum(earned_units, na.rm = TRUE))
+
+
+```
+
+```{r}
+
+# Perform a left join on exposure_id after summarizing the claims data
+merged_data <- earned_data %>%
+  left_join(claims_data_summarized, by = "exposure_id")
+
+# View the merged dataset
+head(merged_data)
+
+
+```
+
+
+```{r}
+
+# Assuming merged_data contains the earned data joined with the summarized claims data
+head(merged_data)
+
+# Select relevant columns for LASSO regression
+# Ensure you have your target variable (e.g., total_claim_amount) and your predictors
+model_data <- merged_data %>%
+  select(total_claim_amount, pet_gender, pet_de_sexed, pet_age_months, 
+         nb_contribution, nb_excess, owner_age_years, nb_average_breed_size, 
+         is_multi_pet_plan, tenure) %>%
+  na.omit()  # Remove rows with missing values
+
+# Convert categorical variables into factors
+model_data$pet_gender <- as.factor(model_data$pet_gender)
+model_data$pet_de_sexed <- as.factor(model_data$pet_de_sexed)
+model_data$is_multi_pet_plan <- as.factor(model_data$is_multi_pet_plan)
+
+
+# Create design matrix for LASSO (excluding intercept with -1)
+x <- model.matrix(total_claim_amount ~ . - 1, data = model_data)  # All predictors
+y <- model_data$total_claim_amount  # Target variable
+
+
+
+```
+
+```{r}
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Split data into training (80%) and testing (20%) sets
+train_index <- createDataPartition(y, p = 0.8, list = FALSE)
+x_train <- x[train_index, ]
+x_test <- x[-train_index, ]
+y_train <- y[train_index]
+y_test <- y[-train_index]
+
+
+
+```
+
+```{r}
+
+# Fit LASSO model using cross-validation to find the best lambda
+lasso_model <- cv.glmnet(x_train, y_train, alpha = 1, family = "gaussian")
+
+# Plot cross-validation results to visualize the optimal lambda
+plot(lasso_model)
+
+# Extract the best lambda value (regularization parameter)
+best_lambda <- lasso_model$lambda.min
+best_lambda  # Output the best lambda
+
+
+
+```
+
+```{r}
+
+# Predict on the test data using the best lambda
+predictions <- predict(lasso_model, s = best_lambda, newx = x_test)
+
+# Calculate RMSE (Root Mean Squared Error) for the test data
+rmse <- sqrt(mean((y_test - predictions)^2))
+cat("Root Mean Squared Error (RMSE):", rmse)
+
+
+```
+
+
+```{r}
+
+# Get the coefficients of the LASSO model using the best lambda
+lasso_coefficients <- coef(lasso_model, s = best_lambda)
+
+# Convert the S4 object to a matrix
+lasso_coefficients_matrix <- as.matrix(lasso_coefficients)
+
+# Extract non-zero coefficients (important features)
+important_factors <- rownames(lasso_coefficients_matrix)[lasso_coefficients_matrix != 0]
+print(important_factors)
+
+```
+```{r}
+
+# Extract non-zero coefficients (excluding intercept if present)
+non_zero_coefficients <- lasso_coefficients_matrix[lasso_coefficients_matrix != 0, ]
+
+# Sort the non-zero coefficients by absolute value (importance)
+sorted_coefficients <- sort(abs(non_zero_coefficients), decreasing = TRUE)
+
+# Get the names of the top 3 most important factors
+top_3_factors <- names(sorted_coefficients)[1:3]
+
+# Print the top 3 factors
+print(top_3_factors)
+
+```
+
+
+
+
+
+```{r}
+# Earned Data Procedures
+
+
 
 earned_data$pet_age_group <- cut(earned_data$pet_age_months, 
                                  breaks = c(0, 12, 36, 72, 120, Inf), 
@@ -178,3 +341,30 @@ ggplot(data = claims2_data) +
 
 
 ```
+
+
+```{r}
+
+# Check the structure of earned data
+str(earned_data)
+
+# Check the structure of claims data
+str(claims_data)
+
+
+```
+
+```{r}
+
+# Join the earned and claims data on exposure_id
+merged_data <- earned_data %>%
+  left_join(claims_data, by = "exposure_id")
+
+# Inspect the merged data
+head(merged_data)
+
+
+
+```
+
+
