@@ -1,0 +1,121 @@
+---
+title: "Datathon Modelling"
+author: "Viswesh Narayan"
+date: "2024-10-08"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+# Install the necessary packages if you haven't already
+install.packages("data.table")
+install.packages("lightgbm")
+install.packages("writexl")
+library(writexl)
+
+# Load libraries
+library(data.table)
+library(lightgbm)
+
+```
+
+```{r}
+
+# Assuming your data frame is called 'data'
+write_xlsx(tweedie_df, "/Users/visweshnarayan/Library/CloudStorage/OneDrive-UNSW/UNSW COURSE MATERIAL T3 2024/ACTL5305/Datathon/Tweedie.xlsx")
+```
+
+```{r}
+
+# Summarize claims data by exposure_id, summing the total claim_paid
+claims_summary <- claims_data %>%
+  group_by(exposure_id) %>%
+  summarise(total_claim_paid = sum(claim_paid, na.rm = TRUE))
+
+
+```
+
+```{r}
+
+
+# Perform left join on exposure_id
+merged_data <- earned_data %>%
+  left_join(claims_summary, by = "exposure_id")
+
+# View the merged dataset
+head(merged_data)
+
+```
+
+
+```{r}
+
+# Select relevant columns for LASSO regression
+model_data <- merged_data %>%
+  select(total_claim_paid, pet_gender, pet_age_months, nb_contribution, 
+         nb_excess, owner_age_years, nb_average_breed_size, tenure,pet_de_sexed_age,pet_is_switcher, nb_contribution_excess,owner_age_years,nb_breed_name_unique_concat,is_multi_pet_plan,earned_units) %>%
+  na.omit() 
+
+# Convert categorical variables to factors
+model_data$pet_gender <- as.factor(model_data$pet_gender)
+
+# Set the target variable and predictors
+x <- model.matrix(total_claim_paid ~ . - 1, data = model_data)  # Exclude intercept
+y <- model_data$total_claim_paid
+
+
+```
+
+
+```{r}
+
+# Split data into training and testing sets
+set.seed(123)  # For reproducibility
+train_index <- createDataPartition(y, p = 0.8, list = FALSE)
+x_train <- x[train_index, ]
+x_test <- x[-train_index, ]
+y_train <- y[train_index]
+y_test <- y[-train_index]
+
+```
+
+
+```{r}
+# Fit LASSO model using the entire dataset
+
+lasso_model_full <- glmnet(x,y,alpha =1, family = 'gaussian')
+plot(lasso_model_full)
+
+cv_lasso_model_full <- cv.glmnet(x, y, alpha = 1, family = "gaussian")
+plot(cv_lasso_model_full)
+
+# Extract the best lambda
+```
+
+
+```{r}
+# Extract the best lambda value (regularization parameter)
+best_lambda_full <- cv_lasso_model_full$lambda.min
+
+lasso_coefficients_full <- coef(cv_lasso_model_full, s = best_lambda_full)
+
+# Convert the S4 object to a matrix
+lasso_coefficients_matrix_full <- as.matrix(lasso_coefficients_full)
+
+# Extract non-zero coefficients (important features)
+non_zero_coefficients_full <- lasso_coefficients_matrix_full[lasso_coefficients_matrix_full != 0, ]
+
+sorted_coefficients_full <- sort(abs(non_zero_coefficients_full), decreasing = TRUE)
+important_factors_full <- names(sorted_coefficients_full)
+print(important_factors_full)
+
+
+```
+
+```
+
