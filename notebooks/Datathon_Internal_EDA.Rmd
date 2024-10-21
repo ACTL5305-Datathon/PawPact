@@ -29,6 +29,10 @@ earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', 
 #  Remove 0 total claim amounts
 claims_data <- claims_data %>% filter(tenure >= 0) %>% filter(total_claim_amount > 0)
 
+claims_data <- claims_data %>%
+  filter(!str_detect(claim_status, "not_paid"))
+
+
 earned_data <- earned_data %>% filter(tenure >= 0)
 ```
 
@@ -50,7 +54,10 @@ earned_data %>% distinct(exposure_id) %>% count()
 unique_breeds <- earned_data %>%
   separate_rows(nb_breed_name_unique_concat, sep = ",") %>%
   mutate(nb_breed_name_unique_concat = str_trim(nb_breed_name_unique_concat)) %>%
-  distinct(nb_breed_name_unique_concat) 
+  mutate(nb_breed_name_unique_concat = gsub("\\s*cross\\s*", "", nb_breed_name_unique_concat)) %>%
+  group_by(nb_breed_name_unique_concat) %>%
+  summarise(breed_count = n())
+  #distinct(nb_breed_name_unique_concat) 
 ```
 
 
@@ -61,6 +68,14 @@ unique_conditions <- claims_data %>%
   group_by(condition_category) %>% 
   summarise(claim_count = n())
 ```
+
+
+```{r}
+unique_claim_types <- claims_data %>% 
+  group_by(claim_status) %>% 
+  summarise(claim_count = n())
+```
+
 
 ```{r}
 # Using tenure was equivalent and simpler
@@ -105,6 +120,17 @@ severity_df <- severity_df %>%
 ```
 
 ```{r}
+unique_breed_conditions <- severity_df %>%
+  separate_rows(nb_breed_name_unique_concat, sep = ",") %>%
+  mutate(nb_breed_name_unique_concat = str_trim(nb_breed_name_unique_concat)) %>%
+  group_by(nb_breed_name_unique_concat, condition_category) %>%
+  summarise(breed_count = n(),
+            average_claim = mean(claim_paid),
+            sd_claim = sd(claim_paid))
+```
+
+
+```{r}
 # Duplicate Claim IDs - This still needs to be dealt with
 dupe_claims <- severity_df %>%
   group_by(claim_id) %>%
@@ -121,6 +147,8 @@ severity_df %>%
 # Exclude these as well
 unpaid_claims <- severity_df %>%
   filter(str_detect(claim_status, "not_paid"))
+
+
 ```
 
 
@@ -131,20 +159,12 @@ tweedie_df <- claims_data %>%
   mutate(total_claim_amount = replace_na(total_claim_amount, 0))
 ```
 
+
 ```{r}
 #ToDo:
 #-Clean up duplicate claim_ids
 #-Create historical claims features -- past claims history allowed/useful for preds
 #-save frequency, severity, tweedie df to csv files
-```
-
-```{r}
-
-```
-
-
-```{r}
-
 ```
 
 
