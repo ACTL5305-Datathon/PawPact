@@ -31,9 +31,30 @@ claims_data <- claims_data %>% filter(tenure >= 0) %>% filter(total_claim_amount
 
 claims_data <- claims_data %>%
   filter(!str_detect(claim_status, "not_paid"))
-
-earned_data <- earned_data %>% filter(tenure >= 0)
 ```
+
+```{r}
+# Remove negative tenures
+# Clean up pet_de_sexed_age factorsx
+earned_data <- earned_data %>% filter(tenure >= 0)
+
+earned_data <- earned_data %>%
+  mutate(pet_de_sexed_age = case_when(
+    str_detect(pet_de_sexed_age, "0-3") ~ "0-3 months",
+    str_detect(pet_de_sexed_age, "4-6") ~ "4-6 months",
+    str_detect(pet_de_sexed_age, "7-12") ~ "7-12 months",
+    str_detect(pet_de_sexed_age, "1-2") ~ "1-2 years",
+    str_detect(pet_de_sexed_age, "2\\+") ~ "2+ years"
+  )) %>%
+  replace_na(list(pet_de_sexed_age = "FALSE"))
+
+earned_data <- earned_data %>%
+  replace_na(list(nb_breed_trait = "unknown"))
+
+earned_data <- earned_data %>%
+  replace_na(list(pet_is_switcher = FALSE))
+```
+
 
 
 # Claims
@@ -76,6 +97,11 @@ tweedie_df <- claims_data %>%
   full_join(earned_data, by = c("exposure_id", "tenure")) %>%
   mutate(total_claim_amount = replace_na(total_claim_amount, 0))
 ```
+
+```{r}
+summary(tweedie_df)
+```
+
 
 
 

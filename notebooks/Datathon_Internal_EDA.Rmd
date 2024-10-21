@@ -24,6 +24,11 @@ earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', 
 ```
 
 ```{r}
+summary(earned_data)
+```
+
+
+```{r}
 #Some cleaning
 #  Remove negative tenures (makes no sense)
 #  Remove 0 total claim amounts
@@ -151,6 +156,41 @@ unpaid_claims <- severity_df %>%
 
 ```
 
+```{r}
+earned_data <- earned_data %>%
+  mutate(pet_de_sexed_age = case_when(
+    str_detect(pet_de_sexed_age, "0-3") ~ "0-3 months",
+    str_detect(pet_de_sexed_age, "4-6") ~ "4-6 months",
+    str_detect(pet_de_sexed_age, "7-12") ~ "7-12 months",
+    str_detect(pet_de_sexed_age, "1-2") ~ "1-2 years",
+    str_detect(pet_de_sexed_age, "2\\+") ~ "2+ years"
+  )) %>%
+  replace_na(list(pet_de_sexed_age = "FALSE"))
+```
+
+```{r}
+earned_data %>% 
+  select(pet_de_sexed_age) %>%
+  distinct()
+```
+
+```{r}
+earned_data <- earned_data %>%
+  replace_na(list(nb_breed_trait = "unknown"))
+```
+
+
+```{r}
+earned_data %>% 
+  select(nb_breed_trait) %>%
+  distinct()
+```
+```{r}
+earned_data %>% 
+  select(nb_average_breed_size) %>%
+  distinct()
+```
+
 
 ```{r}
 tweedie_df <- claims_data %>% 
@@ -158,6 +198,36 @@ tweedie_df <- claims_data %>%
   full_join(earned_data, by = c("exposure_id", "tenure")) %>%
   mutate(total_claim_amount = replace_na(total_claim_amount, 0))
 ```
+
+
+```{r}
+earned_data %>%
+  select(pet_de_sexed_age) %>%
+  distinct()
+```
+```{r}
+earned_data <- earned_data %>%
+  replace_na(list(nb_breed_trait = "unknown"))
+
+earned_data <- earned_data %>%
+  replace_na(list(pet_is_switcher = FALSE))
+```
+
+```{r}
+earned_data %>%
+  select(person_dob) %>%
+  distinct()
+```
+
+```{r}
+earned_data %>%
+  summarise(across(everything(), ~ anyNA(.))) %>%
+  pivot_longer(everything(), names_to = "column", values_to = "has_na") %>%
+  filter(has_na) %>%
+  pull(column)
+```
+
+
 
 
 ```{r}
