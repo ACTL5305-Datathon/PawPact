@@ -98,6 +98,16 @@ tweedie_df <- claims_data %>%
   mutate(total_claim_amount = replace_na(total_claim_amount, 0))
 ```
 
+
+```{r}
+write_csv(frequency_df, "../data/internal/frequency.csv")
+
+write_csv(severity_df, "../data/internal/severity.csv")
+
+write_csv(tweedie_df, "../data/internal/tweedie.csv")
+```
+
+
 ```{r}
 summary(tweedie_df)
 ```
