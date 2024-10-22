@@ -220,11 +220,24 @@ earned_data %>%
 ```
 
 ```{r}
+na_df <- earned_data %>%
+  filter(if_any(everything(), is.na))
+
+earned_data <- earned_data %>%
+  filter(!is.na(person_dob))
+```
+
+
+```{r}
 earned_data %>%
   summarise(across(everything(), ~ anyNA(.))) %>%
   pivot_longer(everything(), names_to = "column", values_to = "has_na") %>%
   filter(has_na) %>%
   pull(column)
+```
+
+```{r}
+
 ```
 
 
