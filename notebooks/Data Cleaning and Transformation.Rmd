@@ -106,11 +106,11 @@ tweedie_df <- claims_data %>%
 
 
 ```{r}
-write_csv(frequency_df, "../data/internal/frequency.csv")
+write_csv(frequency_df, "../data/transformed/frequency.csv")
 
-write_csv(severity_df, "../data/internal/severity.csv")
+write_csv(severity_df, "../data/transformed/severity.csv")
 
-write_csv(tweedie_df, "../data/internal/tweedie.csv")
+write_csv(tweedie_df, "../data/transformed/tweedie.csv")
 ```
 
 
