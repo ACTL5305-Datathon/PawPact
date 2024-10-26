@@ -22,6 +22,7 @@ claims_data <- read_csv('../data/internal/UNSW_claims_data.csv', col_names = TRU
 
 earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', col_names = TRUE)
 ```
+# Claims Data Cleaning
 
 ```{r}
 # Some cleaning
@@ -31,11 +32,30 @@ claims_data <- claims_data %>% filter(tenure >= 0) %>% filter(total_claim_amount
 
 claims_data <- claims_data %>%
   filter(!str_detect(claim_status, "not_paid"))
+
+# Get rid of duplicates across all columns - probably errors
+claims_data <- claims_data %>%
+  distinct()
+
+# Group remaining duplicate claim_ids
+claims_data <- claims_data %>%
+  group_by(claim_start_date, claim_id, tenure, exposure_id) %>%
+  summarise(claim_status = paste(unique(claim_status), collapse = ", "),
+            condition_category = paste(unique(condition_category), collapse = ", "),  
+            claim_paid = sum(claim_paid),
+            total_claim_amount = sum(total_claim_amount))
 ```
 
+# Earned Data Cleaning
+
 ```{r}
+# Remove useless first column
+earned_data <- earned_data %>%
+  select(-c("...1"))
+
 # Remove negative tenures
-earned_data <- earned_data %>% filter(tenure >= 0)
+earned_data <- earned_data %>%
+  filter(tenure >= 0)
 
 # Clean up pet_de_sexed_age factorsx
 earned_data <- earned_data %>%
@@ -56,26 +76,43 @@ earned_data <- earned_data %>%
 earned_data <- earned_data %>%
   replace_na(list(pet_is_switcher = FALSE))
 
-# Remove rows with missing owner DOB
+# Compute median ages by postcode
+age_df <- earned_data %>%
+  group_by(nb_postcode) %>%
+  summarise(median_age = floor(median(owner_age_years, na.rm = TRUE)))
+
+# Impute age and DoB using median, DoB is clunky but we won't use anyway
 earned_data <- earned_data %>%
-  filter(!is.na(person_dob))
+  left_join(age_df, by="nb_postcode") %>%
+  mutate(owner_age_years = coalesce(owner_age_years, median_age)) %>%
+  mutate(person_dob = coalesce(person_dob, as.Date(paste0(2024 - owner_age_years, "-01-01")))) %>%
+  select(-median_age)
 ```
 
 
+```{r}
+density_data <- read_csv('../data/external/MMM areas classification.csv') %>%
+  rename(mm_category = MMM)
 
-# Claims
+earned_data <- left_join(earned_data, density_data, by = c("nb_suburb", "nb_postcode", "nb_state"))
+```
+
+
+# Frequency Data
+
 ```{r}
 claims_count <- claims_data %>% 
   group_by(exposure_id, tenure) %>% 
   summarise(claim_count = n(), .groups = 'drop')
 
-frequency_df <- full_join(earned_data, claims_count, by = c("exposure_id", "tenure"))
+frequency_df <- left_join(earned_data, claims_count, by = c("exposure_id", "tenure"))
 
 frequency_df <- frequency_df %>%
   mutate(claim_count = replace_na(claim_count, 0),
          claim_count_indicator = ifelse(claim_count > 0, 1, 0))
 ```
 
+# Severity Data
 
 ```{r}
 #Probably select(c("exposure_id", "tenure", "total_claim_amount"))
@@ -97,13 +134,17 @@ severity_df <- severity_df %>%
 ```
 
 
+# Joint (Tweedie) Data
+
 ```{r}
 tweedie_df <- claims_data %>% 
-  select(c("exposure_id", "tenure", "total_claim_amount")) %>%
+  group_by(exposure_id, tenure) %>%
+  summarise(claim_paid = sum(claim_paid),
+            total_claim_amount = sum(total_claim_amount)) %>%
   full_join(earned_data, by = c("exposure_id", "tenure")) %>%
-  mutate(total_claim_amount = replace_na(total_claim_amount, 0))
+  mutate(total_claim_amount = replace_na(total_claim_amount, 0),
+         claim_paid = replace_na(claim_paid, 0))
 ```
-
 
 ```{r}
 write_csv(frequency_df, "../data/transformed/frequency.csv")
@@ -117,23 +158,3 @@ write_csv(tweedie_df, "../data/transformed/tweedie.csv")
 ```{r}
 summary(tweedie_df)
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

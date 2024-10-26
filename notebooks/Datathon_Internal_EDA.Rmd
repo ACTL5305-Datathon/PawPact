@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library("tidyverse")
 library("AER")
 library("stringr")
+library("readxl")
 ```
 
 ## Read Data
@@ -237,7 +238,12 @@ earned_data %>%
 ```
 
 ```{r}
+suburb_map <- read_excel('../data/external/MMM areas classification.xlsx', sheet = 1)
 
+suburb_map <- suburb_map %>%
+  distinct()
+
+write_csv(suburb_map, '../data/external/MMM areas classification.csv')
 ```
 
 
