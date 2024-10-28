@@ -1,0 +1,295 @@
+---
+title: "Modelling"
+author: "Helitha Dharmadasa - z5451805"
+date: "2024-10-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("tidyverse")
+library(scales)
+library(MLmetrics)
+library(ModelMetrics)
+library(gridExtra)
+library(caret)
+library(lightgbm)
+library(glmnet)
+#library(statmod)
+```
+
+## Read Data
+
+```{r}
+joint_df <- read_csv('../data/transformed/joint.csv', col_names = TRUE)
+```
+
+```{r}
+# Select the features we want
+modelling_df <- joint_df %>% select("claim_paid", "pet_gender", "pet_de_sexed_age", "pet_is_switcher", "pet_age_months", "nb_contribution", "nb_excess", "nb_address_type_adj", "SA4", "nb_state", "owner_age_years", "nb_number_of_breeds", "nb_average_breed_size", "nb_breed_type", "nb_breed_trait", "is_multi_pet_plan", "quote_time_group", "earned_units", "mm_category")
+
+# Encode catrgorical vars as factors
+modelling_df <- modelling_df %>%
+  mutate_at(vars("pet_gender", "pet_de_sexed_age", "pet_is_switcher", "nb_address_type_adj", "SA4", "nb_state", "nb_average_breed_size", "nb_breed_type", "nb_breed_trait","is_multi_pet_plan", "quote_time_group", "mm_category"), as.factor)
+
+summary(modelling_df)
+
+train_df <- modelling_df
+```
+```{r}
+tweedie_glm <- glm(claim_paid ~ .,
+                   family = tweedie(var.power = 1.5, link.power = 0),  # Tweedie family
+                   data = train_df, weights = earned_units)
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+folds = 5
+
+cv_index <- createFolds(factor(ifelse(train_df$claim_paid > 0, TRUE, FALSE)), folds, returnTrain = TRUE)
+
+cv_ctrl <- trainControl(index = cv_index, 
+                        method = "cv", 
+                        number = folds,
+                        #classProbs = TRUE,
+                        #summaryFunction = LogLosSummary,
+                        savePredictions = TRUE,
+                        allowParallel = TRUE)
+
+#tune_grid <- expand.grid(alpha = 1, lambda = seq(0.001, 1, length = 10))
+```
+
+
+```{r}
+model <- train(claim_paid ~ . -earned_units, 
+                               data = train_df, 
+                               method = "glm", 
+                               family = gaussian,
+                               trControl = cv_ctrl,
+                               metric = "RMSE",
+                               weights = earned_units)#,
+                               #tuneGrid = tune_grid)
+
+model
+
+summary(model)
+```
+
+
+```{r}
+plot(model)
+
+
+coef(model$finalModel, model$finalModel$lambdaOpt)
+#coef(model, lambda=0.223)
+#df_lasso_coef <- as.data.frame(as.matrix(coef(model, s = 0.01)))
+#df_lasso_coef$variable <- rownames(df_lasso_coef)
+# Filter out rows where coef is not equal to 0
+# (df_lasso_coef_filtered <- subset(df_lasso_coef, s1 != 0))
+```
+
+
+```{r, tidy.opts = list(width.cutoff = 70)} 
+# ID/NO varibles were fully unique among all rows and so were useless for modelling.
+# Licence State had no useful information so was removed.
+# Age Group is redundant when including Age so was removed.
+
+subset_df <-
+
+# Perform a test train split of 80% train, 20% test. NOTE TAKE STRATIFIED TEST-TRAIN SPLIT
+train_indices <- createDataPartition(subset_df$fatal, p = 0.8, list = FALSE)
+
+train_df <- subset_df[train_indices, ]
+test_df <- subset_df[-train_indices, ]
+
+# Number of CV folds to run
+folds = 5
+
+# Use createFolds to ensure CV folds are stratified.
+cv_index <- createFolds(factor(), folds, returnTrain = TRUE)
+
+# Define CV parameters to be used among the majority of models
+# Models that downsampled needed slight adjustments.
+cv_ctrl <- trainControl(index = cv_index, 
+                        method = "cv", 
+                        number = folds,
+                        #classProbs = TRUE,
+                        summaryFunction = twoClassSummary,
+                        savePredictions = TRUE,
+                        allowParallel = TRUE)
+```
+
+# Logistic GLM's
+
+### Default Logistic GLM
+```{r, cache = TRUE}
+# Train Model
+direct_logistic_model <- train(fatal ~ ., 
+                               data = train_df, 
+                               method = "glm", 
+                               family = binomial, 
+                               trControl = cv_ctrl,
+                               metric = "ROC")
+
+direct_logistic_model
+```
+
+```{r, results = "hold", cache = TRUE, tidy.opts = list(width.cutoff = 70)}
+# This code is reused to evaluate all models, the only thing that changes is 
+# the model used.
+
+# Calculate prediction as percentage
+predicted_prob <- predict(direct_logistic_model,type = "prob", newdata = test_df )$TRUE.
+obs <- ifelse(test_df$fatal == "TRUE.", 1, 0)
+
+# Call custom max_mcc function
+optimised_mcc <- max_mcc(predicted_prob, obs)
+
+# Calculate thresholded predictions with our optimal threshold determined
+# at the Maximum observed MCC value.
+pred <- factor(ifelse(predicted_prob >= optimised_mcc[1], "TRUE.", "FALSE."), levels = c("TRUE.", "FALSE."))
+
+# Caret confusion matrix is useful for metrics
+confusionMatrix(pred, test_df$fatal)
+
+# Display Max MCC and corresponding threshold.
+sprintf("Max MCC = %.2f at probability threshold %.2f", optimised_mcc[2], optimised_mcc[1])
+```
+
+### Minority Weighted Logistic GLM
+
+```{r, cache = TRUE, tidy.opts = list(width.cutoff = 70)}
+# Calculate training weights as inverse of ratio of minority class to total.
+# So minority class should have high weighting, and majority class has weight
+# of 1.
+train_df$weights <- ifelse(train_df$fatal == "TRUE.",  1 / (table(train_df$fatal)["TRUE."] / length(train_df$fatal)), 1)
+
+# Train Model
+weighted_logistic_model <- train(fatal ~ . - weights, 
+                               data = train_df, 
+                               method = "glm", 
+                               family = quasibinomial, 
+                               trControl = cv_ctrl,
+                               metric = "ROC",
+                               weights = weights)
+
+weighted_logistic_model
+```
+
+```{r, results = "hold", cache = TRUE, tidy.opts = list(width.cutoff = 70)}
+# Assign weights for test dataset to 1 for predictions.
+test_df$weights <- 1
+predicted_prob <- predict(weighted_logistic_model, type = "prob", newdata = test_df )$TRUE.
+
+obs <- ifelse(test_df$fatal == "TRUE.", 1, 0)
+
+optimised_mcc <- max_mcc(predicted_prob, obs)
+
+pred <- factor(ifelse(predicted_prob >= optimised_mcc[1], "TRUE.", "FALSE."), levels = c("TRUE.", "FALSE."))
+
+confusionMatrix(pred, test_df$fatal)
+
+sprintf("Max MCC = %.2f at probability threshold %.2f", optimised_mcc[2], optimised_mcc[1])
+```
+
+
+
+# LIGHT GBM
+```{r, warning = FALSE, results = "hold", cache = TRUE, tidy.opts = list(width.cutoff = 70)}
+lgbm_params <- list(objective = "tweedie",
+                  tweedie_variance_power = 1.5,
+                  boosting_type = "gbdt",
+                  #feature_fraction = 0.3,
+                  metric = "RMSE",
+                  learning_rate = 0.05,
+                  n_estimators = 2500,
+                  num_leaves = 10,
+                  #nthread = 4,
+                  #min_child_samples = 10,
+                  #min_child_weight = 5,
+                  is_unbalance = TRUE) 
+
+# Light GBM needs data formated slightly differently, using provided lgb.Dataset.
+train_lgbm <- lgb.Dataset(data = as.matrix(subset(train_df, select = -c(claim_paid, earned_units))),
+                      label = as.matrix(subset(train_df, select = claim_paid)),
+                      weight = as.matrix(subset(train_df, select = earned_units)))
+#NOTE: SPECIFTY WEIGHT in lgb.Dataset
+
+```
+
+```{r, results = "hide", message = FALSE, warning = FALSE, cache = TRUE}
+# Cross Validate Light GBM with Early Stopping.
+lgbm_cv <- lgb.cv(params = lgbm_params,
+                    data = train_lgbm,
+                    #nrounds = 200,
+                    nfold = 5, 
+                    stratified = TRUE,  
+                    #early_stopping_rounds = 10,
+                    verbose = -1) 
+
+
+# Fit Light GBM with optimal rounds from CV.
+lgbm_model <- lgb.train(params = lgbm_params,
+                         data = train_lgbm,
+                         nrounds = lgbm_cv$best_iter,
+                         verbose = -1)
+
+print(lgbm_cv)
+```
+```{r}
+lgb.plot_tree(model = lgbm_model, tree_index = 0)
+```
+
+
+```{r, warning = FALSE, cache = TRUE, tidy.opts = list(width.cutoff = 70)}
+test_lgbm <- as.matrix(subset(test_df, select = -c(fatal)))
+
+predicted_prob <- predict(lgbm_model, data = test_lgbm)
+
+obs <- ifelse(test_df$fatal == "TRUE.", 1, 0)
+
+optimised_mcc <- max_mcc(predicted_prob, obs)
+
+pred <- factor(ifelse(predicted_prob >= optimised_mcc[1], "TRUE.", "FALSE."), levels = c("TRUE.", "FALSE."))
+
+confusionMatrix(pred, test_df$fatal)
+
+sprintf("Max MCC = %.2f at probability threshold %.2f", optimised_mcc[2], optimised_mcc[1])
+```
+
+# Picking the Light GBM & retraining on entire dataset.
+
+```{r, results = "hide", message = FALSE, warning = FALSE, tidy.opts = list(width.cutoff = 70)}
+# Light GBM needs data formated slightly differently, using provided lgb.Dataset.
+# Retrain on the entire dataset for hopefully increased performance
+full_train_lgbm <- lgb.Dataset(data = as.matrix(subset(driver_subset_df, select = -c(fatal))),
+                      label = as.numeric(ifelse(subset(driver_subset_df, select = c(fatal)) == "TRUE.", 1, 0)))
+
+# Cross Validate Light GBM with Early Stopping.
+full_lgbm_cv <- lgb.cv(params = lgbm_params,
+                    data = train_lgbm,
+                    nrounds = 200,
+                    nfold = 5, 
+                    stratified = TRUE,  
+                    early_stopping_rounds = 50,
+                    verbose = -1) 
+
+
+# Fit Light GBM with optimal rounds from CV.
+full_lgbm_model <- lgb.train(params = lgbm_params,
+                         data = train_lgbm,
+                         nrounds = lgbm_cv$best_iter,
+                         verbose = -1)
+
+
+```
+
