@@ -25,13 +25,14 @@ earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', 
 
 
 ```{r}
-medianincome <-read.csv('/Users/visweshnarayan/Downloads/MedianInc.csv')
+#medianincome <-read.csv('/Users/visweshnarayan/Downloads/MedianInc.csv')
 
 
 # Perform a left join (UNSW earned data left join with external data based on postcode)
-earned_data <- merge(earned_data, medianincome, by = "nb_postcode", all.x = TRUE)
+#earned_data <- merge(earned_data, medianincome, by = "nb_postcode", all.x = TRUE)
 
 ```
+
 # Claims Data Cleaning
 
 ```{r}
@@ -147,7 +148,7 @@ severity_df <- severity_df %>%
 # Joint (Tweedie) Data
 
 ```{r}
-tweedie_df <- claims_data %>% 
+joint_df <- claims_data %>% 
   group_by(exposure_id, tenure) %>%
   summarise(claim_paid = sum(claim_paid),
             total_claim_amount = sum(total_claim_amount)) %>% 
@@ -161,16 +162,13 @@ write_csv(frequency_df, "../data/transformed/frequency.csv")
 
 write_csv(severity_df, "../data/transformed/severity.csv")
 
-write_csv(tweedie_df, "../data/transformed/tweedie.csv")
+write_csv(joint_df, "../data/transformed/joint.csv")
 ```
 
 
 ```{r}
-summary(tweedie_df)
+summary(joint_df)
 ```
-```{r}
 
-
-```
 
 
