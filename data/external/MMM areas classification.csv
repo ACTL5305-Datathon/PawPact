@@ -732,7 +732,7 @@ Denman Prospect,2611,ACT,ACT Remainder - Rendezvous Creek,Namadgi,Weston Creek,A
 Calvert,4340,QLD,Rosewood (Qld),Rosewood,Ipswich Hinterland,Ipswich,5
 Zillmere,4034,QLD,Zillmere,Zillmere,Sandgate,Brisbane - North,1
 Mount Nelson,7007,TAS,Mount Nelson,Mount Nelson - Dynnyrne,Hobart Inner,Hobart,2
-Deanside,3336,VIC,Fraser Rise,Fraser Rise - Plumpton,0,0,1
+Deanside,3336,VIC,Fraser Rise,Fraser Rise - Plumpton,Melton - Bacchus Marsh,Melbourne - West,1
 Berrima,2577,NSW,Wingello,Southern Highlands,Southern Highlands,Southern Highlands and Shoalhaven,3
 Flagstaff Hill,5159,SA,Happy Valley (SA),Happy Valley Reservoir,Onkaparinga,Adelaide - South,1
 Bellambi,2518,NSW,East Corrimal,Corrimal - Tarrawanna - Bellambi,Wollongong,Illawarra,1
@@ -1244,7 +1244,7 @@ West Gladstone,4680,QLD,West Gladstone,West Gladstone,Gladstone - Biloela,Fitzro
 Woori Yallock,3139,VIC,Woori Yallock,Yarra Valley,Cardinia,Melbourne - South East,2
 Rosanna,3084,VIC,Viewbank,Viewbank - Yallambie,Banyule,Melbourne - North East,1
 Brunswick,3056,VIC,Brunswick (Vic.),Brunswick - South,Brunswick - Coburg,Melbourne - Inner,1
-Fraser Rise,3336,VIC,Fraser Rise,Fraser Rise - Plumpton,0,0,1
+Fraser Rise,3336,VIC,Fraser Rise,Fraser Rise - Plumpton,Melton - Bacchus Marsh,Melbourne - West,1
 Basin View,2540,NSW,Jervis Bay,Jervis Bay,Jervis Bay,Other Territories,4
 Jubilee Pocket,4802,QLD,Cannonvale,Airlie - Whitsundays,Whitsunday,Mackay,4
 Olinda,3788,VIC,Silvan,Mount Dandenong - Olinda,Yarra Ranges,Melbourne - Outer East,1
@@ -1431,7 +1431,7 @@ Parkwood,6147,WA,Langford,Beckenham - Kenwick - Langford,Gosnells,Perth - South 
 Cobbitty,2570,NSW,Oran Park,Oran Park,Bringelly - Green Valley,Sydney - South West,1
 Nowra,2541,NSW,South Nowra,Nowra,Shoalhaven,Southern Highlands and Shoalhaven,3
 Mulgoa,2745,NSW,Luddenham,Badgerys Creek,Bringelly - Green Valley,Sydney - South West,1
-Winter Valley,3358,VIC,Winter Valley,Delacombe,0,0,2
+Winter Valley,3358,VIC,Winter Valley,Delacombe,Ballarat,Ballarat,2
 Menora,6050,WA,Menora,Yokine - Coolbinia - Menora,Stirling,Perth - North West,1
 Blakehurst,2221,NSW,South Hurstville,South Hurstville - Blakehurst,Kogarah - Rockdale,Sydney - Inner South West,1
 Hallett Cove,5158,SA,O'Halloran Hill,Happy Valley,Onkaparinga,Adelaide - South,1
@@ -1648,7 +1648,7 @@ Angle Vale,5117,SA,Munno Para Downs,Munno Para West - Angle Vale,Playford,Adelai
 Springton,5235,SA,Tungkillo,Mannum,Murray and Mallee,South Australia - South East,5
 Hamilton North,2292,NSW,Hamilton (NSW),Hamilton - Broadmeadow,Newcastle,Newcastle and Lake Macquarie,1
 Tewantin,4565,QLD,Cootharaba,Noosa Hinterland,Noosa,Sunshine Coast,1
-Aintree,3336,VIC,Fraser Rise,Fraser Rise - Plumpton,0,0,1
+Aintree,3336,VIC,Fraser Rise,Fraser Rise - Plumpton,Melton - Bacchus Marsh,Melbourne - West,1
 Norwest,2153,NSW,Winston Hills,Winston Hills,Parramatta,Sydney - Parramatta,1
 Mount Sheridan,4868,QLD,Woree,Woree,Cairns - South,Cairns,2
 whalan,2770,NSW,Minchinbury,Rooty Hill - Minchinbury,Mount Druitt,Sydney - Blacktown,1
