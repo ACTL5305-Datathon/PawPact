@@ -10,6 +10,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+install.packages("MLmetrics")
+
 library("tidyverse")
 library(scales)
 library(MLmetrics)
@@ -18,13 +20,22 @@ library(gridExtra)
 library(caret)
 library(lightgbm)
 library(glmnet)
-#library(statmod)
+install.packages("statmod")  
+library(statmod)
+```
+
+
+```{r}
+install.packages("lightgbm", repos = "https://cran.r-project.org")
 ```
 
 ## Read Data
 
 ```{r}
-joint_df <- read_csv('../data/transformed/joint.csv', col_names = TRUE)
+joint_df <- read_csv('/Users/visweshnarayan/Downloads/joint.csv', col_names = TRUE)
+
+train_indices <- sample(1:nrow(joint_df), size = 0.7 * nrow(joint_df))
+test_data <- joint_df[-train_indices, ]
 ```
 
 ```{r}
@@ -38,6 +49,10 @@ modelling_df <- modelling_df %>%
 summary(modelling_df)
 
 train_df <- modelling_df
+train_indices <- sample(1:nrow(modelling_df), size = 0.7 * nrow(modelling_df))
+
+train_data <- modelling_df[train_indices, ]
+test_data <- modelling_df[-train_indices, ]
 ```
 ```{r}
 tweedie_glm <- glm(claim_paid ~ .,
@@ -46,11 +61,9 @@ tweedie_glm <- glm(claim_paid ~ .,
 
 ```
 
-
 ```{r}
-
+summary(tweedie_glm)
 ```
-
 
 ```{r}
 folds = 5
@@ -202,7 +215,6 @@ sprintf("Max MCC = %.2f at probability threshold %.2f", optimised_mcc[2], optimi
 ```
 
 
-
 # LIGHT GBM
 ```{r, warning = FALSE, results = "hold", cache = TRUE, tidy.opts = list(width.cutoff = 70)}
 lgbm_params <- list(objective = "tweedie",
@@ -289,6 +301,98 @@ full_lgbm_model <- lgb.train(params = lgbm_params,
                          data = train_lgbm,
                          nrounds = lgbm_cv$best_iter,
                          verbose = -1)
+
+
+```
+
+
+```{r}
+#XGBoost
+
+install.packages('xgboost')
+library(xgboost)
+```
+
+
+```{r}
+# Check for character columns in train_df
+str(train_df)  # Look for any character columns
+```
+
+
+```{r}
+# Convert character columns to factors
+train_df <- train_df %>%
+  mutate(across(where(is.character), as.factor))
+
+str(train_df)
+
+```
+
+
+```{r}
+# One-hot encode all factor columns (except the target and weight columns)
+train_matrix <- model.matrix(~ . - 1, data = subset(train_df, select = -c(claim_paid, earned_units)))
+
+label <- train_df$claim_paid
+weight <- train_df$earned_units
+
+# Create DMatrix for XGBoost
+train_xgb <- xgb.DMatrix(data = train_matrix, label = label, weight = weight)
+```
+
+
+
+```{r}
+xgb_params <- list(
+  objective = "reg:squarederror",   
+  eval_metric = "rmse",             
+  eta = 0.05,                       # Learning rate (analogous to LightGBM's learning rate)
+  max_depth = 5,                    
+  nrounds = 2500,                 
+  colsample_bytree = 0.8,           
+  subsample = 0.8                  
+)
+
+
+
+```
+
+```{r}
+
+# Train XGBoost model
+xgb_model <- xgb.train(
+  params = xgb_params,
+  data = train_xgb,
+  nrounds = xgb_params$nrounds,
+  verbose = 1
+)
+```
+```{r}
+class(xgb_model)
+
+```
+
+```{r}
+xgb.dump(xgb_model)
+```
+
+```{r}
+#Testing XgB and LGBM Models
+
+
+test_matrix <- model.matrix(~ . - 1, data = subset(test_data, select = -c(claim_paid, earned_units)))
+test_xgb <- xgb.DMatrix(data = test_matrix, label = test_data$claim_paid)
+```
+
+
+```{r}
+# For LightGBM
+test_lgbm <- lgb.Dataset(
+  data = as.matrix(subset(test_data, select = -c(claim_paid, earned_units))),
+  label = test_data$claim_paid,
+  weight = test_data$earned_units
+)
 
 
 ```
