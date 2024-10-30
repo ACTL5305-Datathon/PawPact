@@ -10,6 +10,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
+install.packages("MLmetrics")
+
 library("tidyverse")
 library(scales)
 library(MLmetrics)
@@ -18,13 +20,22 @@ library(gridExtra)
 library(caret)
 library(lightgbm)
 library(glmnet)
-#library(statmod)
+install.packages("statmod")  
+library(statmod)
+```
+
+
+```{r}
+install.packages("lightgbm", repos = "https://cran.r-project.org")
 ```
 
 ## Read Data
 
 ```{r}
-joint_df <- read_csv('../data/transformed/joint.csv', col_names = TRUE)
+joint_df <- read_csv('/Users/visweshnarayan/Downloads/joint.csv', col_names = TRUE)
+
+train_indices <- sample(1:nrow(joint_df), size = 0.7 * nrow(joint_df))
+test_data <- joint_df[-train_indices, ]
 ```
 
 ```{r}
@@ -38,6 +49,10 @@ modelling_df <- modelling_df %>%
 summary(modelling_df)
 
 train_df <- modelling_df
+train_indices <- sample(1:nrow(modelling_df), size = 0.7 * nrow(modelling_df))
+
+train_data <- modelling_df[train_indices, ]
+test_data <- modelling_df[-train_indices, ]
 ```
 
 ```{r}
@@ -50,7 +65,7 @@ summary(tweedie_glm)
 ```
 
 ```{r}
-
+summary(tweedie_glm)
 ```
 
 ```{r}
@@ -225,6 +240,8 @@ confusionMatrix(pred, test_df$fatal)
 sprintf("Max MCC = %.2f at probability threshold %.2f", optimised_mcc[2], optimised_mcc[1])
 ```
 
+
+>>>>>>> 5daf1aee45b7c7e1bd8a0b6aaf8e753cf3de709e
 # LIGHT GBM
 
 ```{r, warning = FALSE, results = "hold", cache = TRUE, tidy.opts = list(width.cutoff = 70)}
@@ -315,3 +332,219 @@ full_lgbm_model <- lgb.train(params = lgbm_params,
 
 
 ```
+<<<<<<< HEAD
+=======
+
+
+```{r}
+#XGBoost
+
+install.packages('xgboost')
+library(xgboost)
+```
+
+
+```{r}
+# Check for character columns in train_df
+str(train_df)  # Look for any character columns
+```
+
+
+```{r}
+# Convert character columns to factors
+train_df <- train_df %>%
+  mutate(across(where(is.character), as.factor))
+
+str(train_df)
+
+```
+
+
+```{r}
+# One-hot encode all factor columns (except the target and weight columns)
+train_matrix <- model.matrix(~ . - 1, data = subset(train_df, select = -c(claim_paid, earned_units)))
+
+label <- train_df$claim_paid
+weight <- train_df$earned_units
+
+# Create DMatrix for XGBoost
+train_xgb <- xgb.DMatrix(data = train_matrix, label = label, weight = weight)
+```
+
+
+
+```{r}
+xgb_params <- list(
+  objective = "reg:squarederror",   
+  eval_metric = "rmse",             
+  eta = 0.05,                       # Learning rate (analogous to LightGBM's learning rate)
+  max_depth = 5,                    
+  nrounds = 2500,                 
+  colsample_bytree = 0.8,           
+  subsample = 0.8                  
+)
+
+
+
+```
+
+```{r}
+
+# Train XGBoost model
+xgb_model <- xgb.train(
+  params = xgb_params,
+  data = train_xgb,
+  nrounds = xgb_params$nrounds,
+  verbose = 1
+)
+```
+```{r}
+class(xgb_model)
+
+```
+
+```{r}
+xgb.dump(xgb_model)
+```
+
+```{r}
+#Testing XgB and LGBM Models
+
+
+test_matrix <- model.matrix(~ . - 1, data = subset(test_data, select = -c(claim_paid, earned_units)))
+test_xgb <- xgb.DMatrix(data = test_matrix, label = test_data$claim_paid)
+```
+
+
+```{r}
+# For LightGBM
+test_lgbm <- lgb.Dataset(
+  data = as.matrix(subset(test_data, select = -c(claim_paid, earned_units))),
+  label = test_data$claim_paid,
+  weight = test_data$earned_units
+)
+
+
+```
+
+#Frequency - Poisson Model
+
+```{r}
+
+head(frequency_df)
+```
+
+```{r}
+
+write_csv(severity_df, "../data/transformed/severity.csv")
+
+```
+
+
+
+```{r}
+# Poisson GLM - Frequnecy
+
+install.packages(c("mgcv", "splines", "Metrics"))
+library(mgcv)
+library(splines)
+library(Metrics)
+```
+
+
+```{r}
+library(splines)
+library(mgcv)
+library(Metrics)
+
+```
+
+```{r}
+
+# Convert categorical variables to factors if needed
+frequency_df$pet_gender <- as.factor(frequency_df$pet_gender)
+frequency_df$nb_state.x <- as.factor(frequency_df$nb_state.x)
+frequency_df$nb_state.y <- as.factor(frequency_df$nb_state.y)
+
+```
+
+```{r}
+folds = 5
+
+cv_index <- createFolds(factor(ifelse(frequency_df$claim_count > 0, TRUE, FALSE)), folds, returnTrain = TRUE)
+
+cv_ctrl <- trainControl(index = cv_index, 
+                        method = "cv", 
+                        number = folds,
+                        #classProbs = TRUE,
+                        #summaryFunction = LogLosSummary,
+                        savePredictions = TRUE,
+                        allowParallel = TRUE)
+
+#tune_grid <- expand.grid(alpha = 1, lambda = seq(0.001, 1, length = 10))
+
+```
+
+
+
+```{r}
+model <- train(claim_count ~ . -earned_units, 
+                               data = frequency_df, 
+                               method = "glm", 
+                               family = poisson(link = 'log'),
+                               trControl = cv_ctrl,
+                               metric = "RMSE",
+                               weights = earned_units)#,
+                               #tuneGrid = tune_grid)
+
+model
+
+summary(model)
+
+```
+
+```{r}
+
+# Fit Poisson GLM
+poisson_glm <- glm(claim_count ~ tenure + pet_age_years + owner_age_years + nb_excess + nb_contribution + pet_is_switcher + is_multi_pet_plan + pet_de_sexed_age   , 
+                   family = poisson(link = "log"), data = frequency_df)
+summary(poisson_glm)
+
+
+```
+
+```{r}
+
+# Fit GAM with spline and squared terms
+gam_model <- gam(claim_count ~ s(tenure, bs = "cs") + I(pet_age_years) + owner_age_years + s(nb_excess) + nb_contribution + is_multi_pet_plan,
+                 family = poisson(link = "log"), data = frequency_df)
+summary(gam_model)
+
+
+```
+```{r}
+
+spline_model <- gam(claim_count ~ s(tenure, bs = "cs") , family = poisson(link = "log"), data = frequency_df)
+summary(spline_model)
+
+
+```
+```{r}
+# Poisson GLM RMSE
+glm_preds <- predict(poisson_glm, type = "response")
+glm_rmse <- rmse(frequency_df$claim_count, glm_preds)
+
+# GAM RMSE
+#gam_preds <- predict(gam_model, type = "response")
+#gam_rmse <- rmse(frequency_df$claim_count, gam_preds)
+
+# Spline model RMSE
+spline_preds <- predict(spline_model, type = "response")
+spline_rmse <- rmse(frequency_df$claim_count, spline_preds)
+
+# Output RMSE values
+cat("Poisson GLM RMSE:", glm_rmse, "\n")
+cat("Spline RMSE:", spline_rmse, "\n")
+```
+
+>>>>>>> 5daf1aee45b7c7e1bd8a0b6aaf8e753cf3de709e

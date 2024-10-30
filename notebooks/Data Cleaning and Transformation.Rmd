@@ -25,11 +25,7 @@ earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', 
 
 
 ```{r}
-#medianincome <-read.csv('/Users/visweshnarayan/Downloads/MedianInc.csv')
 
-
-# Perform a left join (UNSW earned data left join with external data based on postcode)
-#earned_data <- merge(earned_data, medianincome, by = "nb_postcode", all.x = TRUE)
 
 ```
 
@@ -100,6 +96,13 @@ earned_data <- earned_data %>%
   select(-median_age)
 ```
 
+```{r}
+medianincome <-read_csv('../data/external/MedianInc.csv')
+
+
+# Perform a left join (UNSW earned data left join with external data based on postcode)
+earned_data <- merge(earned_data, medianincome, by = c("nb_postcode",'nb_suburb','nb_state'), all.x = TRUE)
+```
 
 ```{r}
 density_data <- read_csv('../data/external/MMM areas classification.csv') %>%
