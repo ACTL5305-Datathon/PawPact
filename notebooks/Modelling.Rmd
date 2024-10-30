@@ -397,3 +397,88 @@ test_lgbm <- lgb.Dataset(
 
 ```
 
+#Frequency - Poisson Model
+
+```{r}
+
+head(frequency_df)
+```
+
+```{r}
+
+write_csv(severity_df, "../data/transformed/severity.csv")
+
+```
+
+
+
+```{r}
+# Poisson GLM - Frequnecy
+
+install.packages(c("mgcv", "splines", "Metrics"))
+library(mgcv)
+library(splines)
+library(Metrics)
+```
+
+
+```{r}
+library(splines)
+library(mgcv)
+library(Metrics)
+
+```
+
+```{r}
+
+# Convert categorical variables to factors if needed
+frequency_df$pet_gender <- as.factor(frequency_df$pet_gender)
+frequency_df$nb_state.x <- as.factor(frequency_df$nb_state.x)
+frequency_df$nb_state.y <- as.factor(frequency_df$nb_state.y)
+
+```
+
+```{r}
+
+# Fit Poisson GLM
+poisson_glm <- glm(claim_count ~ tenure + pet_age_years + owner_age_years + nb_excess + nb_contribution + pet_is_switcher + is_multi_pet_plan + pet_de_sexed_age   , 
+                   family = poisson(link = "log"), data = frequency_df)
+summary(poisson_glm)
+
+
+```
+
+```{r}
+
+# Fit GAM with spline and squared terms
+gam_model <- gam(claim_count ~ s(tenure, bs = "cs") + I(pet_age_years) + owner_age_years + s(nb_excess) + nb_contribution + is_multi_pet_plan,
+                 family = poisson(link = "log"), data = frequency_df)
+summary(gam_model)
+
+
+```
+```{r}
+
+spline_model <- gam(claim_count ~ s(tenure, bs = "cs") , family = poisson(link = "log"), data = frequency_df)
+summary(spline_model)
+
+
+```
+```{r}
+# Poisson GLM RMSE
+glm_preds <- predict(poisson_glm, type = "response")
+glm_rmse <- rmse(frequency_df$claim_count, glm_preds)
+
+# GAM RMSE
+#gam_preds <- predict(gam_model, type = "response")
+#gam_rmse <- rmse(frequency_df$claim_count, gam_preds)
+
+# Spline model RMSE
+spline_preds <- predict(spline_model, type = "response")
+spline_rmse <- rmse(frequency_df$claim_count, spline_preds)
+
+# Output RMSE values
+cat("Poisson GLM RMSE:", glm_rmse, "\n")
+cat("Spline RMSE:", spline_rmse, "\n")
+```
+
