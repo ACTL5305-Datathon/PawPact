@@ -29,28 +29,29 @@ joint_df <- read_csv('../data/transformed/joint.csv', col_names = TRUE)
 
 ```{r}
 # Select the features we want
-modelling_df <- joint_df %>% select("claim_paid", "pet_gender", "pet_de_sexed_age", "pet_is_switcher", "pet_age_months", "nb_contribution", "nb_excess", "nb_address_type_adj", "SA4", "nb_state", "owner_age_years", "nb_number_of_breeds", "nb_average_breed_size", "nb_breed_type", "nb_breed_trait", "is_multi_pet_plan", "quote_time_group", "earned_units", "mm_category")
+modelling_df <- joint_df %>% select("claim_paid", "pet_gender", "pet_de_sexed_age", "pet_is_switcher", "pet_age_months", "nb_contribution", "nb_excess", "nb_address_type_adj",  "SA4", "owner_age_years", "nb_number_of_breeds", "nb_average_breed_size", "nb_breed_type", "nb_breed_trait", "is_multi_pet_plan", "quote_time_group", "earned_units", "mm_category")
 
 # Encode catrgorical vars as factors
 modelling_df <- modelling_df %>%
-  mutate_at(vars("pet_gender", "pet_de_sexed_age", "pet_is_switcher", "nb_address_type_adj", "SA4", "nb_state", "nb_average_breed_size", "nb_breed_type", "nb_breed_trait","is_multi_pet_plan", "quote_time_group", "mm_category"), as.factor)
+  mutate_at(vars("pet_gender", "pet_de_sexed_age", "pet_is_switcher", "nb_address_type_adj", "SA4", "nb_breed_type", "nb_breed_trait","is_multi_pet_plan", "quote_time_group", "mm_category"), as.factor)
 
 summary(modelling_df)
 
 train_df <- modelling_df
 ```
-```{r}
-tweedie_glm <- glm(claim_paid ~ .,
-                   family = tweedie(var.power = 1.5, link.power = 0),  # Tweedie family
-                   data = train_df, weights = earned_units)
-
-```
-
 
 ```{r}
+tweedie_glm <- glm(claim_paid ~ . -earned_units,
+                   family = tweedie(var.power = 1.4, link.power = 0),  # Tweedie family
+                   data = train_df, weights = earned_units*100+1)
 
+
+summary(tweedie_glm)
 ```
 
+```{r}
+
+```
 
 ```{r}
 folds = 5
@@ -68,12 +69,11 @@ cv_ctrl <- trainControl(index = cv_index,
 #tune_grid <- expand.grid(alpha = 1, lambda = seq(0.001, 1, length = 10))
 ```
 
-
 ```{r}
 model <- train(claim_paid ~ . -earned_units, 
                                data = train_df, 
                                method = "glm", 
-                               family = gaussian,
+                               family = tweedie(var.power=1.55, link.power=0),
                                trControl = cv_ctrl,
                                metric = "RMSE",
                                weights = earned_units)#,
@@ -82,14 +82,38 @@ model <- train(claim_paid ~ . -earned_units,
 model
 
 summary(model)
+
+predictions <- model$pred
+plot_data <- predictions %>%
+  pivot_longer(cols = c(obs, pred), names_to = "type", values_to = "value")
+
+ggplot(plot_data, aes(x = value, fill = type)) +
+  geom_histogram(position = "identity", bins = 30) +
+  scale_fill_manual(values = c("obs" = "red", "pred" = "green"), alpha=c("obs" = 1, "pred" = 0.1)) +
+  labs(x = "Value", y = "Frequency", title = "Overlapping Histog,rams of Predicted vs Actual Values") +
+  theme_minimal()
+```
+```{r}
+plot_data %>% filter(type=="obs") %>% select(value) %>% sum()
+
 ```
 
 
 ```{r}
-plot(model)
+predictions <- model$pred
+plot_data <- predictions %>%
+  pivot_longer(cols = c(obs, pred), names_to = "type", values_to = "value")
+
+ggplot(plot_data, aes(x = value, fill = type)) +
+  geom_histogram(position = "identity", bins = 30, alpha = 0.9) +
+  scale_fill_manual(values = c("obs" = "red", "pred" = "green")) +
+  labs(x = "Value", y = "Frequency", title = "Overlapping Histograms of Predicted vs Actual Values") +
+  theme_minimal()
+
+#plot(model)
 
 
-coef(model$finalModel, model$finalModel$lambdaOpt)
+#coef(model$finalModel, model$finalModel$lambdaOpt)
 #coef(model, lambda=0.223)
 #df_lasso_coef <- as.data.frame(as.matrix(coef(model, s = 0.01)))
 #df_lasso_coef$variable <- rownames(df_lasso_coef)
@@ -97,8 +121,7 @@ coef(model$finalModel, model$finalModel$lambdaOpt)
 # (df_lasso_coef_filtered <- subset(df_lasso_coef, s1 != 0))
 ```
 
-
-```{r, tidy.opts = list(width.cutoff = 70)} 
+```{r, tidy.opts = list(width.cutoff = 70)}
 # ID/NO varibles were fully unique among all rows and so were useless for modelling.
 # Licence State had no useful information so was removed.
 # Age Group is redundant when including Age so was removed.
@@ -131,6 +154,7 @@ cv_ctrl <- trainControl(index = cv_index,
 # Logistic GLM's
 
 ### Default Logistic GLM
+
 ```{r, cache = TRUE}
 # Train Model
 direct_logistic_model <- train(fatal ~ ., 
@@ -201,9 +225,8 @@ confusionMatrix(pred, test_df$fatal)
 sprintf("Max MCC = %.2f at probability threshold %.2f", optimised_mcc[2], optimised_mcc[1])
 ```
 
-
-
 # LIGHT GBM
+
 ```{r, warning = FALSE, results = "hold", cache = TRUE, tidy.opts = list(width.cutoff = 70)}
 lgbm_params <- list(objective = "tweedie",
                   tweedie_variance_power = 1.5,
@@ -245,10 +268,10 @@ lgbm_model <- lgb.train(params = lgbm_params,
 
 print(lgbm_cv)
 ```
+
 ```{r}
 lgb.plot_tree(model = lgbm_model, tree_index = 0)
 ```
-
 
 ```{r, warning = FALSE, cache = TRUE, tidy.opts = list(width.cutoff = 70)}
 test_lgbm <- as.matrix(subset(test_df, select = -c(fatal)))
@@ -292,4 +315,3 @@ full_lgbm_model <- lgb.train(params = lgbm_params,
 
 
 ```
-
