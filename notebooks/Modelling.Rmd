@@ -439,6 +439,41 @@ frequency_df$nb_state.y <- as.factor(frequency_df$nb_state.y)
 ```
 
 ```{r}
+folds = 5
+
+cv_index <- createFolds(factor(ifelse(frequency_df$claim_count > 0, TRUE, FALSE)), folds, returnTrain = TRUE)
+
+cv_ctrl <- trainControl(index = cv_index, 
+                        method = "cv", 
+                        number = folds,
+                        #classProbs = TRUE,
+                        #summaryFunction = LogLosSummary,
+                        savePredictions = TRUE,
+                        allowParallel = TRUE)
+
+#tune_grid <- expand.grid(alpha = 1, lambda = seq(0.001, 1, length = 10))
+
+```
+
+
+
+```{r}
+model <- train(claim_count ~ . -earned_units, 
+                               data = frequency_df, 
+                               method = "glm", 
+                               family = poisson(link = 'log'),
+                               trControl = cv_ctrl,
+                               metric = "RMSE",
+                               weights = earned_units)#,
+                               #tuneGrid = tune_grid)
+
+model
+
+summary(model)
+
+```
+
+```{r}
 
 # Fit Poisson GLM
 poisson_glm <- glm(claim_count ~ tenure + pet_age_years + owner_age_years + nb_excess + nb_contribution + pet_is_switcher + is_multi_pet_plan + pet_de_sexed_age   , 
