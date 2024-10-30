@@ -23,12 +23,6 @@ claims_data <- read_csv('../data/internal/UNSW_claims_data.csv', col_names = TRU
 earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', col_names = TRUE)
 ```
 
-
-```{r}
-
-
-```
-
 # Claims Data Cleaning
 
 ```{r}
@@ -97,11 +91,11 @@ earned_data <- earned_data %>%
 ```
 
 ```{r}
-medianincome <-read_csv('../data/external/MedianInc.csv')
+income_data <-read_csv('../data/external/Median Income.csv') %>% select("nb_postcode", "nb_suburb", "nb_state", "Median total income($)") %>% rename(median_income = `Median total income($)`)
 
 
 # Perform a left join (UNSW earned data left join with external data based on postcode)
-earned_data <- merge(earned_data, medianincome, by = c("nb_postcode",'nb_suburb','nb_state'), all.x = TRUE)
+earned_data <- left_join(earned_data, income_data, by = c("nb_suburb", "nb_postcode", "nb_state"))
 ```
 
 ```{r}
@@ -161,6 +155,7 @@ joint_df <- claims_data %>%
 ```
 
 ```{r}
+
 write_csv(frequency_df, "../data/transformed/frequency.csv")
 
 write_csv(severity_df, "../data/transformed/severity.csv")
@@ -170,6 +165,8 @@ write_csv(joint_df, "../data/transformed/joint.csv")
 
 
 ```{r}
+summary(frequency_df)
+summary(severity_df)
 summary(joint_df)
 ```
 
