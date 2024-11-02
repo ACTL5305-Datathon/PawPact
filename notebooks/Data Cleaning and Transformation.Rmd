@@ -92,10 +92,22 @@ earned_data <- earned_data %>%
 
 ```{r}
 income_data <-read_csv('../data/external/Median Income.csv') %>% select("nb_postcode", "nb_suburb", "nb_state", "Median total income($)") %>% rename(median_income = `Median total income($)`)
+```
 
 
+```{r}
+weather_data <-read_csv('../data/external/Weather Test Data Updated.csv')
+```
+
+
+```{r}
 # Perform a left join (UNSW earned data left join with external data based on postcode)
 earned_data <- left_join(earned_data, income_data, by = c("nb_suburb", "nb_postcode", "nb_state"))
+```
+
+
+```{r}
+earned_data <-left_join(earned_data,weather_data, by = c("nb_postcode","nb_suburb"))
 ```
 
 ```{r}
