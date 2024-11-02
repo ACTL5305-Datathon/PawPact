@@ -1,0 +1,496 @@
+---
+title: "Modelling"
+author: "Helitha Dharmadasa - z5451805"
+date: "2024-10-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("tidyverse")
+library(scales)
+library(MLmetrics)
+library(ModelMetrics)
+library(MetricsWeighted)
+library(gridExtra)
+library(caret)
+library(lightgbm)
+library(glmnet)
+library(statmod)
+```
+
+## Read Data
+
+```{r}
+severity_df <- read_csv("../data/transformed/severity.csv", col_names = TRUE)
+
+severity_df <- severity_df %>% filter(claim_paid > 0)
+#train_indices <- sample(1:nrow(joint_df), size = 0.7 * nrow(joint_df))
+#test_data <- joint_df[-train_indices, ]
+```
+
+```{r}
+# Select the features we want
+modelling_df <- severity_df %>% select("claim_paid", "pet_gender", "pet_de_sexed_age", "pet_is_switcher", "pet_age_months", "nb_contribution", "nb_excess", "nb_address_type_adj", "median_income", "nb_state", "owner_age_years", "nb_number_of_breeds", "nb_average_breed_size", "nb_breed_type", "nb_breed_trait", "is_multi_pet_plan", "quote_time_group", "earned_units", "mm_category")
+
+# Encode catrgorical vars as factors
+ç <- c("pet_gender", "pet_de_sexed_age", "pet_is_switcher", "nb_address_type_adj", "nb_state", "nb_breed_type", "nb_breed_trait","is_multi_pet_plan", "quote_time_group", "mm_category")
+
+modelling_df <- modelling_df %>%
+  mutate_at(vars(all_of(categorical_features)), as.factor)
+
+modelling_df <- modelling_df %>%
+  mutate(log_earned_units = log(earned_units))
+
+summary(modelling_df)
+
+train_df <- modelling_df
+#train_indices <- sample(1:nrow(modelling_df), size = 0.7 * nrow(modelling_df))
+
+#train_data <- modelling_df[train_indices, ]
+#test_data <- modelling_df[-train_indices, ]
+```
+
+```{r}
+hist(train_df$claim_paid)
+```
+
+
+```{r}
+glm <- glm(claim_paid ~ . -earned_units -log_earned_units,
+                   family = Gamma(link = "log"),
+                   offset = log_earned_units,
+                   data = train_df)
+
+
+summary(glm)
+```
+
+```{r}
+gamma_deviance <- function(data, lev = NULL, model = NULL) {
+  gamma_devaince_val <- deviance_gamma(predicted = data$pred, actual = data$obs)
+  c(Gamma_Deviance = gamma_devaince_val)
+}
+
+folds = 5
+
+#cv_index <- createFolds(factor(ifelse(train_df$claim_paid > 0, TRUE, FALSE)), folds, returnTrain = TRUE)
+
+cv_ctrl <- trainControl(#index = cv_index, 
+                        method = "cv", 
+                        number = folds,
+                        #classProbs = TRUE,
+                        #summaryFunction = LogLosSummary,
+                        summaryFunction = gamma_deviance,
+                        savePredictions = TRUE,
+                        allowParallel = TRUE)
+
+
+#tune_grid <- expand.grid(alpha = seq(0.001, 1, length = 10), lambda = seq(0.001, 1, length = 10))
+```
+
+
+
+```{r}
+model <- train(claim_paid ~ . -earned_units -log_earned_units + offset(log_earned_units), 
+                               data = train_df, 
+                               method = "glm", 
+                               family = Gamma(link = "log"),
+                               trControl = cv_ctrl,
+                               metric = "Gamma_Deviance")#,
+                               #weights = earned_units*100+1,
+                               #tuneGrid = tune_grid) 
+
+model
+
+summary(model)
+
+predictions <- model$pred
+plot_data <- predictions %>%
+  pivot_longer(cols = c(obs, pred), names_to = "type", values_to = "value")
+```
+
+
+```{r}
+predictions <- model$pred
+plot_data <- predictions %>%
+  pivot_longer(cols = c(obs, pred), names_to = "type", values_to = "value")
+
+ggplot(plot_data, aes(x = value, fill = type)) +
+  geom_histogram(position = "identity", bins = 30, alpha = 0.9) +
+  scale_fill_manual(values = c("obs" = "red", "pred" = "green")) +
+  labs(x = "Value", y = "Frequency", title = "Overlapping Histograms of Predicted vs Actual Values") +
+  theme_minimal()
+
+#plot(model)
+
+
+#coef(model$finalModel, model$finalModel$lambdaOpt)
+#coef(model, lambda=0.223)
+#df_lasso_coef <- as.data.frame(as.matrix(coef(model, s = 0.01)))
+#df_lasso_coef$variable <- rownames(df_lasso_coef)
+# Filter out rows where coef is not equal to 0
+# (df_lasso_coef_filtered <- subset(df_lasso_coef, s1 != 0))
+```
+
+
+# LIGHT GBM
+
+```{r, warning = FALSE, results = "hold", cache = TRUE, tidy.opts = list(width.cutoff = 70)}
+# Light GBM needs data formated slightly differently, using provided lgb.Dataset.
+train_lgbm <- lgb.Dataset(data = as.matrix(subset(train_df, select = -c(claim_paid, earned_units))),
+                      label = as.matrix(subset(train_df, select = claim_paid)),
+                      init_score = as.matrix(subset(train_df, select = log_earned_units)),
+                      categorical_feature = categorical_features,
+                      feature_pre_filter=FALSE)
+
+gamma_deviance_lgbm <- function(preds,dtrain){
+  labels <- get_field(dtrain, "label")
+  gamma_devaince_val <- deviance_gamma(predicted = preds, actual = labels)
+  
+  return(list(name="gamma_deviance",value=gamma_devaince_val,higher_better=FALSE))
+}
+```
+
+```{r}
+param_grid <- expand.grid(
+  num_leaves = c(8, 15, 31),
+  learning_rate = c(0.01, 0.1, 0.2),
+  lambda_l1 = c(0, 0.05, 0.1),
+  lambda_l2 = c(0, 0.05, 0.1),
+  min_gain_to_split = c(0, 0.1),
+  min_data_in_leaf = c(3,10,20)
+)
+
+best_score <- Inf
+best_params <- list()
+
+for (i in 1:nrow(param_grid)) {
+  lgbm_params <- list(objective = "gamma",
+                  boosting_type = "gbdt",
+                  metric = "None",
+                  #metric = "gamma",
+                  nthread = 8,
+                  num_leaves = param_grid$num_leaves[i],
+                  learning_rate = param_grid$learning_rate[i],
+                  lambda_l1 = param_grid$lambda_l1[i],
+                  lambda_l2 = param_grid$lambda_l2[i],
+                  min_data_in_leaf = param_grid$min_data_in_leaf[i],
+                  min_gain_to_split = param_grid$min_gain_to_split[i]
+                  ) 
+  
+  lgbm_cv <- lgb.cv(params = lgbm_params,
+                    data = train_lgbm,
+                    eval=gamma_deviance_lgbm,
+                    nrounds = 500,
+                    nfold = 5, 
+                    #early_stopping_rounds = 10,
+                    verbose = -1) 
+  
+  min_score <- lgbm_cv$best_score
+  print(min_score)
+  
+  # Update best parameters if current RMSE is lower
+  if (min_score < best_score) {
+    best_score <- min_score
+    best_params <- lgbm_params
+    best_cv <- lgbm_cv
+  }
+}
+```
+
+```{r}
+lgbm_params <- list(objective = "gamma",
+                  boosting_type = "gbdt",
+                  metric = "None",
+                  #metric = "gamma",
+                  #n_estimators = 2500,
+                  nthread = 8,
+                  num_leaves = 8,
+                  learning_rate = 0.01,
+                  min_data_in_leaf = 10,
+                  min_gain_to_split = 0.1) 
+
+
+# Cross Validate Light GBM with Early Stopping.
+lgbm_cv <- lgb.cv(params = lgbm_params,
+                    eval=gamma_deviance_lgbm,
+                    data = train_lgbm,
+                    nrounds = 500,
+                    nfold = 10, 
+                    verbose = -1) 
+
+
+print(lgbm_cv$best_score)
+```
+
+```{r}
+# Fit Light GBM with optimal rounds from CV.
+lgbm_model <- lgb.train(params = lgbm_params,
+                         data = train_lgbm,
+                         nrounds = lgbm_cv$best_iter,
+                         verbose = -1)
+```
+
+
+
+```{r, warning = FALSE, cache = TRUE, tidy.opts = list(width.cutoff = 70)}
+test_lgbm <- as.matrix(subset(test_df, select = -c(fatal)))
+
+predicted_prob <- predict(lgbm_model, data = test_lgbm)
+
+obs <- ifelse(test_df$fatal == "TRUE.", 1, 0)
+
+optimised_mcc <- max_mcc(predicted_prob, obs)
+
+pred <- factor(ifelse(predicted_prob >= optimised_mcc[1], "TRUE.", "FALSE."), levels = c("TRUE.", "FALSE."))
+
+confusionMatrix(pred, test_df$fatal)
+
+sprintf("Max MCC = %.2f at probability threshold %.2f", optimised_mcc[2], optimised_mcc[1])
+```
+
+# Picking the Light GBM & retraining on entire dataset.
+
+```{r, results = "hide", message = FALSE, warning = FALSE, tidy.opts = list(width.cutoff = 70)}
+# Light GBM needs data formated slightly differently, using provided lgb.Dataset.
+# Retrain on the entire dataset for hopefully increased performance
+full_train_lgbm <- lgb.Dataset(data = as.matrix(subset(driver_subset_df, select = -c(fatal))),
+                      label = as.numeric(ifelse(subset(driver_subset_df, select = c(fatal)) == "TRUE.", 1, 0)))
+
+# Cross Validate Light GBM with Early Stopping.
+full_lgbm_cv <- lgb.cv(params = lgbm_params,
+                    data = train_lgbm,
+                    nrounds = 200,
+                    nfold = 5, 
+                    stratified = TRUE,  
+                    early_stopping_rounds = 50,
+                    verbose = -1) 
+
+
+# Fit Light GBM with optimal rounds from CV.
+full_lgbm_model <- lgb.train(params = lgbm_params,
+                         data = train_lgbm,
+                         nrounds = lgbm_cv$best_iter,
+                         verbose = -1)
+
+
+```
+<<<<<<< HEAD
+=======
+
+
+```{r}
+#XGBoost
+
+install.packages('xgboost')
+library(xgboost)
+```
+
+
+```{r}
+# Check for character columns in train_df
+str(train_df)  # Look for any character columns
+```
+
+
+```{r}
+# Convert character columns to factors
+train_df <- train_df %>%
+  mutate(across(where(is.character), as.factor))
+
+str(train_df)
+
+```
+
+
+```{r}
+# One-hot encode all factor columns (except the target and weight columns)
+train_matrix <- model.matrix(~ . - 1, data = subset(train_df, select = -c(claim_paid, earned_units)))
+
+label <- train_df$claim_paid
+weight <- train_df$earned_units
+
+# Create DMatrix for XGBoost
+train_xgb <- xgb.DMatrix(data = train_matrix, label = label, weight = weight)
+```
+
+
+
+```{r}
+xgb_params <- list(
+  objective = "reg:squarederror",   
+  eval_metric = "rmse",             
+  eta = 0.05,                       # Learning rate (analogous to LightGBM's learning rate)
+  max_depth = 5,                    
+  nrounds = 2500,                 
+  colsample_bytree = 0.8,           
+  subsample = 0.8                  
+)
+
+
+
+```
+
+```{r}
+
+# Train XGBoost model
+xgb_model <- xgb.train(
+  params = xgb_params,
+  data = train_xgb,
+  nrounds = xgb_params$nrounds,
+  verbose = 1
+)
+```
+```{r}
+class(xgb_model)
+
+```
+
+```{r}
+xgb.dump(xgb_model)
+```
+
+```{r}
+#Testing XgB and LGBM Models
+
+
+test_matrix <- model.matrix(~ . - 1, data = subset(test_data, select = -c(claim_paid, earned_units)))
+test_xgb <- xgb.DMatrix(data = test_matrix, label = test_data$claim_paid)
+```
+
+
+```{r}
+# For LightGBM
+test_lgbm <- lgb.Dataset(
+  data = as.matrix(subset(test_data, select = -c(claim_paid, earned_units))),
+  label = test_data$claim_paid,
+  weight = test_data$earned_units
+)
+
+
+```
+
+#Frequency - Poisson Model
+
+```{r}
+
+head(frequency_df)
+```
+
+```{r}
+
+write_csv(severity_df, "../data/transformed/severity.csv")
+
+```
+
+
+
+```{r}
+# Poisson GLM - Frequnecy
+
+install.packages(c("mgcv", "splines", "Metrics"))
+library(mgcv)
+library(splines)
+library(Metrics)
+```
+
+
+```{r}
+library(splines)
+library(mgcv)
+library(Metrics)
+
+```
+
+```{r}
+
+# Convert categorical variables to factors if needed
+frequency_df$pet_gender <- as.factor(frequency_df$pet_gender)
+frequency_df$nb_state.x <- as.factor(frequency_df$nb_state.x)
+frequency_df$nb_state.y <- as.factor(frequency_df$nb_state.y)
+
+```
+
+```{r}
+folds = 5
+
+cv_index <- createFolds(factor(ifelse(frequency_df$claim_count > 0, TRUE, FALSE)), folds, returnTrain = TRUE)
+
+cv_ctrl <- trainControl(index = cv_index, 
+                        method = "cv", 
+                        number = folds,
+                        #classProbs = TRUE,
+                        #summaryFunction = LogLosSummary,
+                        savePredictions = TRUE,
+                        allowParallel = TRUE)
+
+#tune_grid <- expand.grid(alpha = 1, lambda = seq(0.001, 1, length = 10))
+
+```
+
+
+
+```{r}
+model <- train(claim_count ~ . -earned_units, 
+                               data = frequency_df, 
+                               method = "glm", 
+                               family = poisson(link = 'log'),
+                               trControl = cv_ctrl,
+                               metric = "RMSE",
+                               weights = earned_units)#,
+                               #tuneGrid = tune_grid)
+
+model
+
+summary(model)
+
+```
+
+```{r}
+
+# Fit Poisson GLM
+poisson_glm <- glm(claim_count ~ tenure + pet_age_years + owner_age_years + nb_excess + nb_contribution + pet_is_switcher + is_multi_pet_plan + pet_de_sexed_age   , 
+                   family = poisson(link = "log"), data = frequency_df)
+summary(poisson_glm)
+
+
+```
+
+```{r}
+
+# Fit GAM with spline and squared terms
+gam_model <- gam(claim_count ~ s(tenure, bs = "cs") + I(pet_age_years) + owner_age_years + s(nb_excess) + nb_contribution + is_multi_pet_plan,
+                 family = poisson(link = "log"), data = frequency_df)
+summary(gam_model)
+
+
+```
+```{r}
+
+spline_model <- gam(claim_count ~ s(tenure, bs = "cs") , family = poisson(link = "log"), data = frequency_df)
+summary(spline_model)
+
+
+```
+```{r}
+# Poisson GLM RMSE
+glm_preds <- predict(poisson_glm, type = "response")
+glm_rmse <- rmse(frequency_df$claim_count, glm_preds)
+
+# GAM RMSE
+#gam_preds <- predict(gam_model, type = "response")
+#gam_rmse <- rmse(frequency_df$claim_count, gam_preds)
+
+# Spline model RMSE
+spline_preds <- predict(spline_model, type = "response")
+spline_rmse <- rmse(frequency_df$claim_count, spline_preds)
+
+# Output RMSE values
+cat("Poisson GLM RMSE:", glm_rmse, "\n")
+cat("Spline RMSE:", spline_rmse, "\n")
+```
+
