@@ -19,7 +19,7 @@ Aeroglen,4870,QLD,Whitfield (Qld),Whitfield - Edge Hill,Cairns - South,Cairns,53
 Agnes Banks,2753,NSW,Agnes Banks,Yarramundi - Londonderry,Richmond - Windsor,Sydney - Outer West and Blue Mountains,53387
 Agnes Water,4677,QLD,Agnes Water,Agnes Water - Miriam Vale,Gladstone - Biloela,Fitzroy,37106
 Ainslie,2602,ACT,Watson,Watson,North Canberra,Australian Capital Territory,72070
-Aintree,3336,VIC,Fraser Rise,Fraser Rise - Plumpton,0,0,41055
+Aintree,3336,VIC,Fraser Rise,Fraser Rise - Plumpton,Melton - Bacchus Marsh,Melbourne - West,41055
 Airds,2560,NSW,Appin (NSW),Douglas Park - Appin,Wollondilly,Sydney - Outer South West,61453
 Airlie Beach,4802,QLD,Cannonvale,Airlie - Whitsundays,Whitsunday,Mackay,46282
 Airport West,3042,VIC,Keilor East,Keilor East,Keilor,Melbourne - North West,60083
@@ -767,7 +767,7 @@ Deagon,4017,QLD,Sandgate (Qld),Sandgate - Shorncliffe,Sandgate,Brisbane - North,
 Deakin,2600,ACT,Barton,Barton,Woden,Australian Capital Territory,82298
 Dean Park,2761,NSW,Plumpton (NSW),Hassall Grove - Plumpton,Mount Druitt,Sydney - Blacktown,56022
 Deanside,3335,VIC,Plumpton (Vic.),Fraser Rise - Plumpton,Melton - Bacchus Marsh,Melbourne - West,54031
-Deanside,3336,VIC,Fraser Rise,Fraser Rise - Plumpton,0,0,41055
+Deanside,3336,VIC,Fraser Rise,Fraser Rise - Plumpton,Melton - Bacchus Marsh,Melbourne - West,41055
 Deception Bay,4508,QLD,North Lakes,North Lakes,Narangba - Burpengary,Moreton Bay - North,47353
 Dee Why,2099,NSW,Oxford Falls,Frenchs Forest - Oxford Falls,Warringah,Sydney - Northern Beaches,59516
 Deebing Heights,4306,QLD,Ripley,Ripley,Burnett,Wide Bay,62141
@@ -1017,7 +1017,7 @@ Franklin,2913,ACT,Taylor,Taylor,Gungahlin,Australian Capital Territory,37348
 Frankston,3199,VIC,Seaford (Vic.),Seaford (Vic.),Mornington Peninsula,Mornington Peninsula,52932
 Frankston North,3200,VIC,Frankston North,Frankston North,Frankston,Mornington Peninsula,48248
 Frankston South,3199,VIC,Seaford (Vic.),Seaford (Vic.),Mornington Peninsula,Mornington Peninsula,53597
-Fraser Rise,3336,VIC,Fraser Rise,Fraser Rise - Plumpton,0,0,41055
+Fraser Rise,3336,VIC,Fraser Rise,Fraser Rise - Plumpton,Melton - Bacchus Marsh,Melbourne - West,41055
 Freeling,5372,SA,Freeling,Light,Barossa,Barossa - Yorke - Mid North,50311
 Freemans Reach,2756,NSW,Bligh Park,Windsor - Bligh Park,Richmond - Windsor,Sydney - Outer West and Blue Mountains,55945
 Fremantle,6160,WA,Fremantle,Fremantle,Fremantle,Perth - South West,59936
@@ -2851,7 +2851,7 @@ Windsor,4030,QLD,Wooloowin,Wooloowin - Lutwyche,Brisbane Inner - North,Brisbane 
 Winmalee,2777,NSW,Springwood (NSW),Springwood - Winmalee,Blue Mountains,Sydney - Outer West and Blue Mountains,58170
 Winslow,3281,VIC,Bushfield,Warrnambool - North,Warrnambool - Otway Ranges,Warrnambool and South West,50654
 Winston Hills,2153,NSW,Winston Hills,Winston Hills,Parramatta,Sydney - Parramatta,60097
-Winter Valley,3358,VIC,Winter Valley,Delacombe,0,0,51915
+Winter Valley,3358,VIC,Winter Valley,Delacombe,Ballarat,Ballarat,51915
 Winthrop,6150,WA,Winthrop,Winthrop,Melville,Perth - South West,49376
 Wirlinga,2640,NSW,Welaregang,Tumbarumba,Wodonga - Alpine,Hume,45354
 Wishart,4122,QLD,Wishart (Qld),Wishart,Nathan,Brisbane - South,50060
