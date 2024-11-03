@@ -1,0 +1,206 @@
+---
+title: "Modelling"
+author: "Helitha Dharmadasa - z5451805"
+date: "2024-10-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("tidyverse")
+library(scales)
+library(MLmetrics)
+library(ModelMetrics)
+library(MetricsWeighted)
+library(gridExtra)
+library(caret)
+library(lightgbm)
+library(glmnet)
+library(statmod)
+library(mgcv)
+library(splines)
+library(Metrics)
+library(xgboost)
+```
+
+
+## Read Data
+
+```{r}
+frequency_df <- read_csv('../data/transformed/frequency.csv', col_names = TRUE)
+
+#train_indices <- sample(1:nrow(joint_df), size = 0.7 * nrow(joint_df))
+#test_data <- joint_df[-train_indices, ]
+```
+
+```{r}
+# Select the features we want
+modelling_df <- frequency_df %>% select("claim_count", "pet_gender", "pet_de_sexed_age", "pet_is_switcher", "pet_age_months", "nb_contribution", "nb_excess", "nb_address_type_adj", "median_income", "nb_state", "owner_age_years", "nb_number_of_breeds", "nb_average_breed_size", "nb_breed_type", "nb_breed_trait", "is_multi_pet_plan", "quote_time_group", "earned_units", "mm_category")
+
+# Encode catrgorical vars as factors
+categorical_features <- c("pet_gender", "pet_de_sexed_age", "pet_is_switcher", "nb_address_type_adj", "nb_state", "nb_breed_type", "nb_breed_trait","is_multi_pet_plan", "quote_time_group", "mm_category")
+
+modelling_df <- modelling_df %>%
+  mutate_at(vars(all_of(categorical_features)), as.factor)
+
+#modelling_df <- modelling_df %>%
+#  mutate(log_earned_units = log(earned_units))
+
+summary(modelling_df)
+
+train_df <- modelling_df
+
+#train_indices <- sample(1:nrow(modelling_df), size = 0.7 * nrow(modelling_df))
+#train_data <- modelling_df[train_indices, ]
+#test_data <- modelling_df[-train_indices, ]
+```
+
+#Frequency - Poisson Model
+
+```{r}
+poisson_deviance <- function(data, lev = NULL, model = NULL) {
+  pred <- ifelse(data$pred < 0, 0, data$pred)
+  poisson_deviance_val <- deviance_poisson(predicted = pred, actual = data$obs)
+  c(Poisson_Deviance = poisson_deviance_val)
+}
+
+folds = 5
+
+# Stratify
+cv_index <- createFolds(factor(ifelse(train_df$claim_count > 0, TRUE, FALSE)), folds, returnTrain = TRUE)
+
+cv_ctrl <- trainControl(index = cv_index, 
+                        method = "cv", 
+                        number = folds,
+                        summaryFunction = poisson_deviance,
+                        savePredictions = TRUE,
+                        allowParallel = TRUE)
+
+#tune_grid <- expand.grid(alpha = 0, lambda = seq(0.001, 1, length = 10))
+```
+
+
+```{r}
+model <- train(claim_count ~ . -earned_units + offset(log(earned_units)), 
+                               data = train_df, 
+                               method = "glm", 
+                               family = poisson(link = 'log'),
+                               trControl = cv_ctrl,
+                               metric = "Poisson_Deviance")
+                               #tuneGrid = tune_grid
+
+model
+
+summary(model)
+```
+
+
+```{r}
+# Fit GAM with spline and squared terms
+#gam_model <- gam(claim_count ~ s(tenure, bs = "cs") + I(pet_age_years) + owner_age_years + s(nb_excess) + nb_contribution + is_multi_pet_plan, family = poisson(link = "log"), data = frequency_df)
+#summary(gam_model)
+```
+
+```{r}
+#spline_model <- gam(claim_count ~ s(tenure, bs = "cs") , family = poisson(link = "log"), data = frequency_df)
+#summary(spline_model)
+```
+
+```{r}
+# Poisson GLM RMSE
+glm_preds <- predict(poisson_glm, type = "response")
+glm_rmse <- rmse(frequency_df$claim_count, glm_preds)
+
+# GAM RMSE
+#gam_preds <- predict(gam_model, type = "response")
+#gam_rmse <- rmse(frequency_df$claim_count, gam_preds)
+
+# Spline model RMSE
+spline_preds <- predict(spline_model, type = "response")
+spline_rmse <- rmse(frequency_df$claim_count, spline_preds)
+
+# Output RMSE values
+cat("Poisson GLM RMSE:", glm_rmse, "\n")
+cat("Spline RMSE:", spline_rmse, "\n")
+```
+
+```{r}
+# Check for character columns in train_df
+str(train_df)  # Look for any character columns
+```
+
+
+```{r}
+# Convert character columns to factors
+train_df <- train_df %>%
+  mutate(across(where(is.character), as.factor))
+
+str(train_df)
+
+```
+
+
+```{r}
+# One-hot encode all factor columns (except the target and weight columns)
+train_matrix <- model.matrix(~ . - 1, data = subset(train_df, select = -c(claim_paid, earned_units)))
+
+label <- train_df$claim_paid
+weight <- train_df$earned_units
+
+# Create DMatrix for XGBoost
+train_xgb <- xgb.DMatrix(data = train_matrix, label = label, weight = weight)
+```
+
+
+# XGBoost
+```{r}
+xgb_params <- list(
+  objective = "reg:squarederror",   
+  eval_metric = "rmse",             
+  eta = 0.05,                       # Learning rate (analogous to LightGBM's learning rate)
+  max_depth = 5,                    
+  nrounds = 2500,                 
+  colsample_bytree = 0.8,           
+  subsample = 0.8                  
+)
+
+```
+
+```{r}
+# Train XGBoost model
+xgb_model <- xgb.train(
+  params = xgb_params,
+  data = train_xgb,
+  nrounds = xgb_params$nrounds,
+  verbose = 1
+)
+```
+
+```{r}
+class(xgb_model)
+```
+
+```{r}
+xgb.dump(xgb_model)
+```
+
+```{r}
+#Testing XgB and LGBM Models
+test_matrix <- model.matrix(~ . - 1, data = subset(test_data, select = -c(claim_paid, earned_units)))
+test_xgb <- xgb.DMatrix(data = test_matrix, label = test_data$claim_paid)
+```
+
+
+```{r}
+# For LightGBM
+test_lgbm <- lgb.Dataset(
+  data = as.matrix(subset(test_data, select = -c(claim_paid, earned_units))),
+  label = test_data$claim_paid,
+  weight = test_data$earned_units
+)
+
+
+```
