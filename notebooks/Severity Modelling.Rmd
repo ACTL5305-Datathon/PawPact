@@ -10,16 +10,19 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-library("tidyverse")
-library(scales)
-library(MLmetrics)
-library(ModelMetrics)
-library(MetricsWeighted)
-library(gridExtra)
-library(caret)
-library(lightgbm)
-library(glmnet)
-library(statmod)
+install.packages("pacman")
+library(pacman)
+pacman::p_load(tidyverse,
+               scales,
+               MLmetrics,
+               ModelMetrics,
+               MetricsWeighted,
+               gridExtra,
+               caret,
+               lightgbm,
+               glmnet,
+               statmod,
+               car)
 ```
 
 ## Read Data
@@ -32,10 +35,37 @@ severity_df <- read_csv("../data/transformed/severity.csv", col_names = TRUE)
 
 ```{r}
 # Select the features we want
-modelling_df <- severity_df %>% select("claim_paid", "pet_gender", "pet_de_sexed_age", "pet_is_switcher", "pet_age_months", "nb_contribution", "nb_excess", "nb_address_type_adj", "median_income", "nb_state", "owner_age_years", "nb_number_of_breeds", "nb_average_breed_size", "nb_breed_type", "nb_breed_trait", "is_multi_pet_plan", "quote_time_group", "earned_units", "mm_category")
+modelling_df <- severity_df %>% select("claim_paid", 
+                                       "pet_gender", 
+                                       "pet_de_sexed_age", 
+                                       "pet_is_switcher", 
+                                       "pet_age_months", 
+                                       "nb_contribution", 
+                                       "nb_excess", 
+                                       "nb_address_type_adj", 
+                                       "median_income", 
+                                       "nb_state", 
+                                       "owner_age_years", 
+                                       "nb_number_of_breeds", 
+                                       "nb_average_breed_size", 
+                                       "nb_breed_type", 
+                                       "nb_breed_trait", 
+                                       "is_multi_pet_plan", 
+                                       "quote_time_group", 
+                                       "earned_units", 
+                                       "mm_category")
 
 # Encode catrgorical vars as factors
-categorical_features <- c("pet_gender", "pet_de_sexed_age", "pet_is_switcher", "nb_address_type_adj", "nb_state", "nb_breed_type", "nb_breed_trait","is_multi_pet_plan", "quote_time_group", "mm_category")
+categorical_features <- c("pet_gender", 
+                          "pet_de_sexed_age", 
+                          "pet_is_switcher", 
+                          "nb_address_type_adj", 
+                          "nb_state", 
+                          "nb_breed_type", 
+                          "nb_breed_trait",
+                          "is_multi_pet_plan", 
+                          "quote_time_group", 
+                          "mm_category")
 
 modelling_df <- modelling_df %>%
   mutate_at(vars(all_of(categorical_features)), as.factor)
@@ -43,37 +73,36 @@ modelling_df <- modelling_df %>%
 modelling_df <- modelling_df %>%
   mutate(log_earned_units = log(earned_units))
 
-summary(modelling_df)
+train_df <- na.omit(modelling_df[modelling_df$claim_paid>0,])
 
-train_df <- modelling_df
+summary(train_df)
 #train_indices <- sample(1:nrow(modelling_df), size = 0.7 * nrow(modelling_df))
 
 #train_data <- modelling_df[train_indices, ]
 #test_data <- modelling_df[-train_indices, ]
 ```
-
 ```{r}
-hist(train_df$claim_paid)
+
+# Step 2: Filter the tibble to exclude claim_paid values above the 99th percentile
+train_df <- train_df %>%
+  filter(claim_paid <= quantile(train_df$claim_paid, 0.999))
+
+hist(train_df$claim_paid,
+     #xlim=c(0,2000),
+     breaks=150,
+     xlab="Paid Claims",
+     main="")
+
 ```
 
-
-```{r}
-glm <- glm(claim_paid ~ . -earned_units -log_earned_units,
-                   family = Gamma(link = "log"),
-                   offset = log_earned_units,
-                   data = train_df)
-
-
-summary(glm)
-```
 
 ```{r}
 gamma_deviance <- function(data, lev = NULL, model = NULL) {
-  gamma_devaince_val <- deviance_gamma(predicted = data$pred, actual = data$obs)
-  c(Gamma_Deviance = gamma_devaince_val)
+  gamma_deviance_val <- deviance_gamma(predicted = data$pred, actual = data$obs)
+  c(Gamma_Deviance = gamma_deviance_val)
 }
 
-folds = 5
+folds = 10
 
 #cv_index <- createFolds(factor(ifelse(train_df$claim_paid > 0, TRUE, FALSE)), folds, returnTrain = TRUE)
 
@@ -85,9 +114,6 @@ cv_ctrl <- trainControl(#index = cv_index,
                         summaryFunction = gamma_deviance,
                         savePredictions = TRUE,
                         allowParallel = TRUE)
-
-
-tune_grid <- expand.grid(alpha = seq(0.001, 1, length = 10), lambda = seq(0.001, 1, length = 10))
 ```
 
 
@@ -101,16 +127,31 @@ model <- train(claim_paid ~ . -earned_units + offset(log_earned_units),
                                metric = "Gamma_Deviance")#,
                                #weights = earned_units*100+1,
                                #tuneGrid = tune_grid) 
-
-model
-
 summary(model)
 
+#vif(model$finalModel)
+
+#cooks_dist <- cooks.distance(model$finalModel)
+#plot(cooks_dist, type = "h")
+
+par(mfrow=c(2,2), mar=rep(4,4))
+plot(model$finalModel)
+par(mfrow=c(1,1))
 predictions <- model$pred
 plot_data <- predictions %>%
   pivot_longer(cols = c(obs, pred), names_to = "type", values_to = "value")
 ```
 
+```{r}
+glm <- glm(claim_paid ~ . -earned_units -log_earned_units,
+                   family = Gamma(link = "log"),
+                   offset = log_earned_units,
+                   data = train_df)
+summary(glm)
+par(mfrow=c(2,2))
+plot(glm)
+par(mfrow=c(1,1))
+```
 
 ```{r}
 predictions <- model$pred
@@ -120,7 +161,8 @@ plot_data <- predictions %>%
 ggplot(plot_data, aes(x = value, fill = type)) +
   geom_histogram(position = "identity", bins = 30, alpha = 0.9) +
   scale_fill_manual(values = c("obs" = "red", "pred" = "green")) +
-  labs(x = "Value", y = "Frequency", title = "Overlapping Histograms of Predicted vs Actual Values") +
+  labs(x = "Value", y = "Frequency", 
+       title = "Overlapping Histograms of Predicted vs Actual Values") +
   theme_minimal()
 
 #plot(model)
