@@ -95,13 +95,22 @@ model <- train(claim_paid ~ . -earned_units,
                                #tuneGrid = tune_grid)
 
 model
+```
 
+
+```{r}
 summary(model)
+```
 
+
+```{r}
 predictions <- model$pred
 plot_data <- predictions %>%
   pivot_longer(cols = c(obs, pred), names_to = "type", values_to = "value")
+```
 
+
+```{r}
 ggplot(plot_data, aes(x = value, fill = type)) +
   geom_histogram(position = "identity", bins = 30) +
   scale_fill_manual(values = c("obs" = "red", "pred" = "green"), alpha=c("obs" = 1, "pred" = 0.1)) +
@@ -332,8 +341,6 @@ full_lgbm_model <- lgb.train(params = lgbm_params,
 
 
 ```
-<<<<<<< HEAD
-=======
 
 
 ```{r}
@@ -485,23 +492,32 @@ cv_ctrl <- trainControl(index = cv_index,
 
 ```
 
+```{r}
+
+cleaned_data <- na.omit(frequency_df)
+```
 
 
 ```{r}
-model <- train(claim_count ~ . -earned_units, 
-                               data = frequency_df, 
-                               method = "glm", 
-                               family = poisson(link = 'log'),
-                               trControl = cv_ctrl,
-                               metric = "RMSE",
-                               weights = earned_units)#,
-                               #tuneGrid = tune_grid)
+library(doParallel)
+cl <- makeCluster(detectCores() - 1)
+registerDoParallel(cl)
 
-model
+model <- train(
+  claim_count ~ . -earned_units,
+  data = cleaned_data,
+  method = "glm",
+  family = poisson(link = 'log'),
+  trControl = cv_ctrl,
+  metric = "RMSE",
+  weights = earned_units
+)
 
-summary(model)
+stopCluster(cl)
 
 ```
+
+
 
 ```{r}
 
@@ -513,6 +529,8 @@ summary(poisson_glm)
 
 ```
 
+
+
 ```{r}
 
 # Fit GAM with spline and squared terms
@@ -522,6 +540,8 @@ summary(gam_model)
 
 
 ```
+
+
 ```{r}
 
 spline_model <- gam(claim_count ~ s(tenure, bs = "cs") , family = poisson(link = "log"), data = frequency_df)
@@ -529,6 +549,8 @@ summary(spline_model)
 
 
 ```
+
+
 ```{r}
 # Poisson GLM RMSE
 glm_preds <- predict(poisson_glm, type = "response")

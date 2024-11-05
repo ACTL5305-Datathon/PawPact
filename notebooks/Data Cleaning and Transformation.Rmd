@@ -29,10 +29,7 @@ earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', 
 # Some cleaning
 # Remove negative tenures (makes no sense)
 # Remove 0 total claim amounts
-# Treat $0 payments as no claim
-claims_data <- claims_data %>%
-  filter(tenure >= 0) %>% 
-  filter(total_claim_amount > 0)
+claims_data <- claims_data %>% filter(tenure >= 0) %>% filter(total_claim_amount > 0)
 
 claims_data <- claims_data %>%
   filter(!str_detect(claim_status, "not_paid"))
@@ -60,10 +57,6 @@ earned_data <- earned_data %>%
 # Remove negative tenures
 earned_data <- earned_data %>%
   filter(tenure >= 0)
-
-# earned_units in months with claims is set to 0 for some reason, correct this to 1.
-earned_data <- earned_data %>%
-  mutate(earned_units = ifelse(earned_units == 0, 1, earned_units))
 
 # Clean up pet_de_sexed_age factorsx
 earned_data <- earned_data %>%
@@ -97,7 +90,26 @@ earned_data <- earned_data %>%
   select(-median_age)
 ```
 
-# Join Density data
+```{r}
+income_data <-read_csv('../data/external/Median Income.csv') %>% select("nb_postcode", "nb_suburb", "nb_state", "Median total income($)") %>% rename(median_income = `Median total income($)`)
+```
+
+
+```{r}
+weather_data <-read_csv('../data/external/Weather Test Data Updated.csv')
+```
+
+
+```{r}
+# Perform a left join (UNSW earned data left join with external data based on postcode)
+earned_data <- left_join(earned_data, income_data, by = c("nb_suburb", "nb_postcode", "nb_state"))
+```
+
+
+```{r}
+earned_data <-left_join(earned_data,weather_data, by = c("nb_postcode","nb_suburb"))
+```
+
 ```{r}
 density_data <- read_csv('../data/external/MMM areas classification.csv') %>%
   rename(mm_category = MMM)
@@ -105,32 +117,11 @@ density_data <- read_csv('../data/external/MMM areas classification.csv') %>%
 earned_data <- left_join(earned_data, density_data, by = c("nb_suburb", "nb_postcode", "nb_state"))
 ```
 
-# Join Income Data
-```{r}
-income_data <-read_csv('../data/external/Median Income.csv') %>% rename(median_income = `Median total income($)`)
-
-
-# Perform a left join (UNSW earned data left join with external data based on postcode)
-earned_data <- income_data %>% select("nb_postcode", "nb_suburb", "nb_state", "median_income") %>%
-  right_join(earned_data, by = c("nb_suburb", "nb_postcode", "nb_state"))
-
-income_df <- income_data %>%
-  group_by(SA3) %>%
-  summarise(imputed_median_income = median(median_income, na.rm = TRUE))
-
-earned_data <- earned_data %>%
-  left_join(income_df, by="SA3") %>%
-    mutate(median_income = coalesce(median_income, imputed_median_income)) %>%
-  select(-imputed_median_income)
-```
-
 
 # Frequency Data
 
 ```{r}
-# Calculate claims count (treat $0 claims as non-existent)
 claims_count <- claims_data %>% 
-  filter(claim_paid > 0) %>%
   group_by(exposure_id, tenure) %>% 
   summarise(claim_count = n(), .groups = 'drop')
 
@@ -144,29 +135,22 @@ frequency_df <- frequency_df %>%
 # Severity Data
 
 ```{r}
-# Calculate claims severity (treat $0 claims as non-existent)
-severity_df <- claims_data %>%
-  filter(claim_paid > 0) %>%
-  left_join( earned_data, by = c("exposure_id", "tenure"))
+#Probably select(c("exposure_id", "tenure", "total_claim_amount"))
+severity_df <- left_join(claims_data, earned_data, by = c("exposure_id", "tenure"))
 
-#severity_df <- severity_df %>% 
-#  mutate(claim_day_diff = as.numeric(claim_start_date - UW_Date) + 1,
-#         manual_earned_units = claim_day_diff / days_in_month(UW_Date),
-#         earned_units = coalesce(na_if(earned_units, 0), manual_earned_units)) %>%
-#  select(-claim_day_diff, -manual_earned_units)
 #total claim amount = claim Paid / contribution + excess / gst
 #167.07/0.9+100/1.1
 #claim paid = (total claim amount - excess / gst ) * contribution
 
-#severity_df <- severity_df %>%
-#  group_by(condition_category, exposure_id) %>%
-#  mutate(excess_flag = ifelse(row_number() == 1, 1, 0)) %>%
-#  ungroup()
+severity_df <- severity_df %>%
+  group_by(condition_category, exposure_id) %>%
+  mutate(excess_flag = ifelse(row_number() == 1, 1, 0)) %>%
+  ungroup()
 
-#severity_df <- severity_df %>% 
-#  mutate(claim_due_excess = (total_claim_amount - (nb_excess)/1.1)*(nb_contribution/100),
-#         claim_due_no_excess = total_claim_amount*(nb_contribution/100)) %>%
-#  arrange(claim_start_date, exposure_id, claim_id) 
+severity_df <- severity_df %>% 
+  mutate(claim_due_excess = (total_claim_amount - (nb_excess)/1.1)*(nb_contribution/100),
+         claim_due_no_excess = total_claim_amount*(nb_contribution/100)) %>%
+  arrange(claim_start_date, exposure_id, claim_id) 
 ```
 
 
@@ -190,13 +174,6 @@ write_csv(severity_df, "../data/transformed/severity.csv")
 
 write_csv(joint_df, "../data/transformed/joint.csv")
 ```
-
-
-```{r}
-severity_df %>% filter(earned_units == 0)
-```
-
-
 
 
 ```{r}
