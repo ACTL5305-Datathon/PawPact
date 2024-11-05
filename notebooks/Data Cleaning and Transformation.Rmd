@@ -21,6 +21,21 @@ library("stringr")
 claims_data <- read_csv('../data/internal/UNSW_claims_data.csv', col_names = TRUE)
 
 earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', col_names = TRUE)
+
+prediction_data <- read_csv('../data/internal/New_Customers_Pricing_Output_File.csv', col_names = TRUE)
+```
+# Prediction data cleaning
+
+```{r}
+prediction_data <- prediction_data %>% 
+  mutate(train_flag = FALSE,
+         earned_units = 1,
+         nb_policy_first_inception_date = as.POSIXct("2024-11-01 17:00:00"),
+         tenure = 0) %>%
+  select(-Full_month_premium)
+
+prediction_data <- prediction_data %>%
+  filter(!(nb_breed_trait %in% c("siamese", "forest cat", "spotted cats", "persian", "burmese")))
 ```
 
 # Claims Data Cleaning
@@ -48,14 +63,15 @@ claims_data <- claims_data %>%
             condition_category = paste(unique(condition_category), collapse = ", "),  
             claim_paid = sum(claim_paid),
             total_claim_amount = sum(total_claim_amount))
+
+earned_data <- earned_data %>% 
+  mutate(train_flag = TRUE) 
 ```
 
 # Earned Data Cleaning
 
 ```{r}
-# Remove useless first column
-earned_data <- earned_data %>%
-  select(-c("...1"))
+# Cleaning steps only to apply to training data
 
 # Remove negative tenures
 earned_data <- earned_data %>%
@@ -74,6 +90,18 @@ earned_data <- earned_data %>%
     )
  ) %>% select(-earned_units_manual, -days_in_month)
 
+earned_data <- earned_data %>% 
+  select(-c("...1", "UW_Date", "row_num", "exposure_id_1"))
+```
+
+
+```{r}
+# Bind prediction and earned data for next transformations
+earned_data <- bind_rows(earned_data, prediction_data)
+```
+
+
+```{r}
 # Clean up pet_de_sexed_age factorsx
 earned_data <- earned_data %>%
   mutate(pet_de_sexed_age = case_when(
@@ -135,6 +163,16 @@ earned_data <- earned_data %>%
   select(-imputed_median_income)
 ```
 
+```{r}
+prediction_df <- earned_data %>%
+  filter(train_flag == FALSE) %>%
+  select(-train_flag)
+
+earned_data <- earned_data %>%
+  filter(train_flag == TRUE) %>%
+  select(-train_flag)
+```
+
 
 # Frequency Data
 
@@ -158,26 +196,7 @@ frequency_df <- frequency_df %>%
 # Calculate claims severity (treat $0 claims as non-existent)
 severity_df <- claims_data %>%
   filter(claim_paid > 0) %>%
-  left_join( earned_data, by = c("exposure_id", "tenure"))
-
-#severity_df <- severity_df %>% 
-#  mutate(claim_day_diff = as.numeric(claim_start_date - UW_Date) + 1,
-#         manual_earned_units = claim_day_diff / days_in_month(UW_Date),
-#         earned_units = coalesce(na_if(earned_units, 0), manual_earned_units)) %>%
-#  select(-claim_day_diff, -manual_earned_units)
-#total claim amount = claim Paid / contribution + excess / gst
-#167.07/0.9+100/1.1
-#claim paid = (total claim amount - excess / gst ) * contribution
-
-#severity_df <- severity_df %>%
-#  group_by(condition_category, exposure_id) %>%
-#  mutate(excess_flag = ifelse(row_number() == 1, 1, 0)) %>%
-#  ungroup()
-
-#severity_df <- severity_df %>% 
-#  mutate(claim_due_excess = (total_claim_amount - (nb_excess)/1.1)*(nb_contribution/100),
-#         claim_due_no_excess = total_claim_amount*(nb_contribution/100)) %>%
-#  arrange(claim_start_date, exposure_id, claim_id) 
+  left_join(earned_data, by = c("exposure_id", "tenure"))
 ```
 
 
@@ -200,9 +219,9 @@ write_csv(frequency_df, "../data/transformed/frequency.csv")
 write_csv(severity_df, "../data/transformed/severity.csv")
 
 write_csv(joint_df, "../data/transformed/joint.csv")
+
+write_csv(joint_df, "../data/transformed/prediction.csv")
 ```
-
-
 
 ```{r}
 summary(frequency_df)
