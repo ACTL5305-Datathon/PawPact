@@ -62,8 +62,17 @@ earned_data <- earned_data %>%
   filter(tenure >= 0)
 
 # earned_units in months with claims is set to 0 for some reason, correct this to 1.
+# Earned units with incredibly small values are nonsensical - set to 1 for tenures >= 0
+# Or calculate for tenures == 0
 earned_data <- earned_data %>%
-  mutate(earned_units = ifelse(earned_units == 0, 1, earned_units))
+  mutate(days_in_month = days_in_month(nb_policy_first_inception_date),
+    earned_units_manual = pmax(days_in_month - day(nb_policy_first_inception_date), 1) / days_in_month,
+    earned_units = case_when(
+      tenure == 0 & earned_units <= 1e-10 ~ earned_units_manual,
+      tenure != 0 & earned_units <= 1e-10 ~ 1,
+      TRUE ~ earned_units
+    )
+ ) %>% select(-earned_units_manual, -days_in_month)
 
 # Clean up pet_de_sexed_age factorsx
 earned_data <- earned_data %>%
@@ -95,7 +104,9 @@ earned_data <- earned_data %>%
   mutate(owner_age_years = coalesce(owner_age_years, median_age)) %>%
   mutate(person_dob = coalesce(person_dob, as.Date(paste0(2024 - owner_age_years, "-01-01")))) %>%
   select(-median_age)
+
 ```
+
 
 # Join Density data
 ```{r}
@@ -190,12 +201,6 @@ write_csv(severity_df, "../data/transformed/severity.csv")
 
 write_csv(joint_df, "../data/transformed/joint.csv")
 ```
-
-
-```{r}
-severity_df %>% filter(earned_units == 0)
-```
-
 
 
 
