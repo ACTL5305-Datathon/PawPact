@@ -1,0 +1,241 @@
+---
+title: "Modelling"
+author: "Helitha Dharmadasa - z5451805"
+date: "2024-10-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("tidyverse")
+library(scales)
+library(MLmetrics)
+library(ModelMetrics)
+library(MetricsWeighted)
+library(gridExtra)
+library(caret)
+library(lightgbm)
+library(glmnet)
+library(statmod)
+```
+
+## Read Data
+
+```{r}
+severity_df <- read_csv("../data/transformed/severity.csv", col_names = TRUE)
+#train_indices <- sample(1:nrow(joint_df), size = 0.7 * nrow(joint_df))
+#test_data <- joint_df[-train_indices, ]
+```
+
+```{r}
+# Select the features we want
+modelling_df <- severity_df %>% select("claim_paid", "pet_gender", "pet_de_sexed_age", "pet_is_switcher", "pet_age_months", "nb_contribution", "nb_excess", "nb_address_type_adj", "median_income", "nb_state", "owner_age_years", "nb_number_of_breeds", "nb_average_breed_size", "nb_breed_type", "nb_breed_trait", "is_multi_pet_plan", "quote_time_group", "earned_units", "mm_category")
+
+# Encode catrgorical vars as factors
+categorical_features <- c("pet_gender", "pet_de_sexed_age", "pet_is_switcher", "nb_address_type_adj", "nb_state", "nb_breed_type", "nb_breed_trait","is_multi_pet_plan", "quote_time_group", "mm_category")
+
+modelling_df <- modelling_df %>%
+  mutate_at(vars(all_of(categorical_features)), as.factor)
+
+modelling_df <- modelling_df %>%
+  mutate(log_earned_units = log(earned_units))
+
+summary(modelling_df)
+
+train_df <- modelling_df
+#train_indices <- sample(1:nrow(modelling_df), size = 0.7 * nrow(modelling_df))
+
+#train_data <- modelling_df[train_indices, ]
+#test_data <- modelling_df[-train_indices, ]
+```
+
+```{r}
+hist(train_df$claim_paid)
+```
+
+
+```{r}
+glm <- glm(claim_paid ~ . -earned_units -log_earned_units,
+                   family = Gamma(link = "log"),
+                   offset = log_earned_units,
+                   data = train_df)
+
+
+summary(glm)
+```
+
+```{r}
+gamma_deviance <- function(data, lev = NULL, model = NULL) {
+  gamma_devaince_val <- deviance_gamma(predicted = data$pred, actual = data$obs)
+  c(Gamma_Deviance = gamma_devaince_val)
+}
+
+folds = 5
+
+#cv_index <- createFolds(factor(ifelse(train_df$claim_paid > 0, TRUE, FALSE)), folds, returnTrain = TRUE)
+
+cv_ctrl <- trainControl(#index = cv_index, 
+                        method = "cv", 
+                        number = folds,
+                        #classProbs = TRUE,
+                        #summaryFunction = LogLosSummary,
+                        summaryFunction = gamma_deviance,
+                        savePredictions = TRUE,
+                        allowParallel = TRUE)
+
+
+tune_grid <- expand.grid(alpha = seq(0.001, 1, length = 10), lambda = seq(0.001, 1, length = 10))
+```
+
+
+
+```{r}
+model <- train(claim_paid ~ . -earned_units + offset(log_earned_units), 
+                               data = train_df, 
+                               method = "glm", 
+                               family = Gamma(link = "log"),
+                               trControl = cv_ctrl,
+                               metric = "Gamma_Deviance")#,
+                               #weights = earned_units*100+1,
+                               #tuneGrid = tune_grid) 
+
+model
+
+summary(model)
+
+predictions <- model$pred
+plot_data <- predictions %>%
+  pivot_longer(cols = c(obs, pred), names_to = "type", values_to = "value")
+```
+
+
+```{r}
+predictions <- model$pred
+plot_data <- predictions %>%
+  pivot_longer(cols = c(obs, pred), names_to = "type", values_to = "value")
+
+ggplot(plot_data, aes(x = value, fill = type)) +
+  geom_histogram(position = "identity", bins = 30, alpha = 0.9) +
+  scale_fill_manual(values = c("obs" = "red", "pred" = "green")) +
+  labs(x = "Value", y = "Frequency", title = "Overlapping Histograms of Predicted vs Actual Values") +
+  theme_minimal()
+
+#plot(model)
+
+
+#coef(model$finalModel, model$finalModel$lambdaOpt)
+#coef(model, lambda=0.223)
+#df_lasso_coef <- as.data.frame(as.matrix(coef(model, s = 0.01)))
+#df_lasso_coef$variable <- rownames(df_lasso_coef)
+# Filter out rows where coef is not equal to 0
+# (df_lasso_coef_filtered <- subset(df_lasso_coef, s1 != 0))
+```
+
+
+# LIGHT GBM
+```{r, warning = FALSE, results = "hold", cache = TRUE, tidy.opts = list(width.cutoff = 70)}
+# Light GBM needs data formated slightly differently, using provided lgb.Dataset.
+train_lgbm <- lgb.Dataset(data = as.matrix(subset(train_df, select = -c(claim_paid, earned_units, log_earned_units))),
+                      label = as.matrix(subset(train_df, select = claim_paid)),
+                      init_score = as.matrix(subset(train_df, select = log_earned_units)),
+                      categorical_feature = categorical_features)
+
+gamma_deviance_lgbm <- function(preds,dtrain){
+  labels <- get_field(dtrain, "label")
+  gamma_devaince_val <- deviance_gamma(predicted = preds, actual = labels)
+  
+  return(list(name="gamma_deviance",value=gamma_devaince_val,higher_better=FALSE))
+}
+```
+
+```{r}
+param_grid <- expand.grid(
+  num_leaves = c(8, 15, 31),
+  learning_rate = c(0.01, 0.1, 0.2),
+  lambda_l1 = c(0, 0.05, 0.1),
+  lambda_l2 = c(0, 0.05, 0.1),
+  min_gain_to_split = c(0, 0.1),
+  min_data_in_leaf = c(3,10,20)
+)
+
+best_score <- Inf
+best_params <- list()
+
+for (i in 1:nrow(param_grid)) {
+  lgbm_params <- list(objective = "gamma",
+                  boosting_type = "gbdt",
+                  metric = "None",
+                  #metric = "gamma",
+                  nthread = 8,
+                  num_leaves = param_grid$num_leaves[i],
+                  learning_rate = param_grid$learning_rate[i],
+                  lambda_l1 = param_grid$lambda_l1[i],
+                  lambda_l2 = param_grid$lambda_l2[i],
+                  min_data_in_leaf = param_grid$min_data_in_leaf[i],
+                  min_gain_to_split = param_grid$min_gain_to_split[i]
+                  ) 
+  
+  lgbm_cv <- lgb.cv(params = lgbm_params,
+                    data = train_lgbm,
+                    eval=gamma_deviance_lgbm,
+                    nrounds = 500,
+                    nfold = 5, 
+                    #early_stopping_rounds = 10,
+                    verbose = -1) 
+  
+  min_score <- lgbm_cv$best_score
+  print(min_score)
+  
+  # Update best parameters if current RMSE is lower
+  if (min_score < best_score) {
+    best_score <- min_score
+    best_params <- lgbm_params
+    best_cv <- lgbm_cv
+  }
+}
+```
+
+```{r}
+lgbm_params <- list(objective = "gamma",
+                  boosting_type = "gbdt",
+                  metric = "None",
+                  #metric = "gamma",
+                  #n_estimators = 2500,
+                  nthread = 8,
+                  num_leaves = 8,
+                  learning_rate = 0.1,
+                  min_data_in_leaf = 10,
+                  min_gain_to_split = 0.1) 
+
+
+# Cross Validate Light GBM with Early Stopping.
+lgbm_cv <- lgb.cv(params = lgbm_params,
+                    eval=gamma_deviance_lgbm,
+                    data = train_lgbm,
+                    nrounds = 500,
+                    nfold = 10, 
+                    verbose = -1) 
+
+
+print(lgbm_cv$best_score)
+```
+
+```{r}
+# Fit Light GBM with optimal rounds from CV.
+lgbm_model <- lgb.train(params = lgbm_params,
+                         data = train_lgbm,
+                         nrounds = lgbm_cv$best_iter,
+                         verbose = -1)
+```
+
+
+
+```{r, warning = FALSE, cache = TRUE, tidy.opts = list(width.cutoff = 70)}
+test_lgbm <- as.matrix(subset(test_df, select = -c(fatal)))
+
+predicted_prob <- predict(lgbm_model, data = test_lgbm)
+```
+
