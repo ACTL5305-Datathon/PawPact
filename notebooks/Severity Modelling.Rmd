@@ -40,8 +40,8 @@ categorical_features <- c("pet_gender", "pet_de_sexed_age", "pet_is_switcher", "
 modelling_df <- modelling_df %>%
   mutate_at(vars(all_of(categorical_features)), as.factor)
 
-#modelling_df <- modelling_df %>%
-#  mutate(log_earned_units = log(earned_units))
+modelling_df <- modelling_df %>%
+  mutate(log_earned_units = log(earned_units))
 
 summary(modelling_df)
 
@@ -93,7 +93,7 @@ tune_grid <- expand.grid(alpha = seq(0.001, 1, length = 10), lambda = seq(0.001,
 
 
 ```{r}
-model <- train(claim_paid ~ . -earned_units + offset(log(earned_units)), 
+model <- train(claim_paid ~ . -earned_units + offset(log_earned_units), 
                                data = train_df, 
                                method = "glm", 
                                family = Gamma(link = "log"),
@@ -138,11 +138,10 @@ ggplot(plot_data, aes(x = value, fill = type)) +
 # LIGHT GBM
 ```{r, warning = FALSE, results = "hold", cache = TRUE, tidy.opts = list(width.cutoff = 70)}
 # Light GBM needs data formated slightly differently, using provided lgb.Dataset.
-train_lgbm <- lgb.Dataset(data = as.matrix(subset(train_df, select = -c(claim_paid, earned_units))),
+train_lgbm <- lgb.Dataset(data = as.matrix(subset(train_df, select = -c(claim_paid, earned_units, log_earned_units))),
                       label = as.matrix(subset(train_df, select = claim_paid)),
-                      init_score = as.matrix(subset(train_df, select = earned_units)),
-                      categorical_feature = categorical_features,
-                      feature_pre_filter=FALSE)
+                      init_score = as.matrix(subset(train_df, select = log_earned_units)),
+                      categorical_feature = categorical_features)
 
 gamma_deviance_lgbm <- function(preds,dtrain){
   labels <- get_field(dtrain, "label")
