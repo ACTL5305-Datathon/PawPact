@@ -10,10 +10,11 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-library("tidyverse")
-library("AER")
-library("stringr")
-library("readxl")
+library(pacman)
+pacman::p_load(tidyverse,
+               AER,
+               stringr,
+               readxl)
 ```
 
 ## Read Data
@@ -27,12 +28,14 @@ earned_data <- read_csv('../data/internal/UNSW_earned_data_adjusted_Sep27.csv', 
 ```{r}
 summary(earned_data)
 ```
-
+```{r}
+summary(claims_data)
+```
 
 ```{r}
 #Some cleaning
-#  Remove negative tenures (makes no sense)
-#  Remove 0 total claim amounts
+#  Remove negative tenures (unrealistic)
+#  Remove entries with total_claim_amounts = 0 (irrelevant)
 claims_data <- claims_data %>% filter(tenure >= 0) %>% filter(total_claim_amount > 0)
 
 claims_data <- claims_data %>%
@@ -246,8 +249,78 @@ suburb_map <- suburb_map %>%
 write_csv(suburb_map, '../data/external/MMM areas classification.csv')
 ```
 
+```{r}
+severity_df <- read_csv("../data/transformed/severity.csv", col_names = TRUE)
 
+# Plot 1: Relationship between log(Earned Units) and Claim Paid
+ggplot(severity_df[severity_df$earned_units<1 & severity_df$earned_units>0,], aes(x = log(earned_units), y = claim_paid, color = as.factor(nb_excess))) +
+  geom_point(size = 3) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed") +
+  labs(
+    title = "Effect of Log of Earned Units and Excess on Claim Paid",
+    x = "log(Earned Units)",
+    y = "Claim Paid ($)",
+    color = "Excess ($)"
+  ) +
+  theme_minimal()
 
+# Plot 2: Relationship between Total Claim Amount and Claim Paid
+ggplot(severity_df[severity_df$earned_units<1 & severity_df$earned_units>0,], aes(x = total_claim_amount, y = claim_paid, color = as.factor(nb_excess))) +
+  geom_point(size = 3) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed") +
+  labs(
+    title = "Effect of Total Claim Amount and Excess on Claim Paid",
+    x = "Total Claim Amount ($)",
+    y = "Claim Paid ($)",
+    color = "Excess ($)"
+  ) +
+  theme_minimal()
+
+severity_df <- severity_df %>%
+  mutate(
+    sum_insured = claim_paid + nb_excess,  # Calculate sum insured
+    exposure = total_claim_amount / earned_units  # Calculate exposure
+  )
+
+# Plot 3: Histogram of log(exposure) vs log(sum insured)
+ggplot(severity_df, aes(y = log(exposure), x = log(sum_insured))) +
+  geom_bin2d(bins = 60, fill = "blue", alpha = 0.7) +
+  labs(
+    title = "Histogram of log(Exposure) vs log(Sum Insured)",
+    y = "log(Exposure)",
+    x = "log(Sum Insured)"
+  ) +
+  theme_minimal()
+
+# Plot 4: Histogram of log(earned units) vs log(sum insured)
+ggplot(severity_df, aes(y = log(earned_units), x = log(sum_insured))) +
+  geom_bin2d(bins = 60, fill = "green", alpha = 0.7) +
+  labs(
+    title = "Histogram of log(Earned Units) vs log(Sum Insured)",
+    y = "log(Earned Units)",
+    x = "log(Sum Insured)"
+  ) +
+  theme_minimal()
+
+# Plot 5: Investigating Insurer Contribution and Claim Paid for different quote_time_group
+# We will average the payouts by nb_contribution and nb_excess for clarity
+summary_df <- severity_df %>%
+  group_by(nb_excess, nb_contribution) %>%
+  summarise(average_claim_paid = mean(claim_paid), .groups = 'drop')
+
+# Plot the relationship
+ggplot(summary_df, aes(x = nb_contribution, y = average_claim_paid, color = as.factor(nb_excess))) +
+  geom_point(size = 3) +
+  geom_line() +
+  labs(
+    title = "Effect of Insurer Contribution Percentage on Claim Paid",
+    x = "Insurer Contribution (%)",
+    y = "Average Claim Paid ($)",
+    color = "Excess ($)"
+  ) +
+  theme_minimal()
+
+```
 
 ```{r}
 #ToDo:
