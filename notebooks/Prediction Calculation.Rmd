@@ -41,7 +41,7 @@ prediction_data <- prediction_data %>%
   filter(!(nb_breed_trait %in% c("siamese", "forest cat", "spotted cats", "persian", "burmese")))
 
 prediction_data <- prediction_data %>%
-  mutate(Full_month_premium = prediction_df$Full_month_premium)
+  mutate(Full_month_premium = round(prediction_df$Full_month_premium,2))
 ```
 
 ```{r}
