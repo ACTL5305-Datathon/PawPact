@@ -24,6 +24,8 @@ pacman::p_load(tidyverse,
                car,
                shapviz,
                kernelshap)
+
+set.seed(5459538)
 ```
 
 ## Read Data
@@ -93,8 +95,8 @@ test_df <- modelling_df[-train_indices, ]
 
 ```{r}
 # Step 2: Filter the tibble to exclude claim_paid values above the 99th percentile
-#train_df <- train_df %>%
-#  filter(claim_paid <= quantile(train_df$claim_paid, 0.999))
+train_df <- train_df %>%
+  filter(claim_paid <= quantile(train_df$claim_paid, 0.999))
 
 hist(train_df$claim_paid,
      #xlim=c(0,2000),

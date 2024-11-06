@@ -25,6 +25,8 @@ library(splines)
 library(Metrics)
 library(shapviz)
 library(kernelshap)
+
+set.seed(5459538)
 ```
 
 
