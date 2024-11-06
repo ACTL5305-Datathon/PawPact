@@ -31,9 +31,10 @@ select <- dplyr::select
 set.seed(5459538)
 ```
 
-## Read Data
+# Read Data
 
 ```{r}
+# Read data
 severity_df <- read_csv("../data/transformed/severity.csv", col_names = TRUE)
 
 prediction_data <- read_csv('../data/transformed/prediction.csv', col_names = TRUE)
@@ -88,18 +89,20 @@ modelling_df <- modelling_df %>%
 prediction_df <- prediction_df %>%
   mutate_at(vars(all_of(categorical_features)), as.factor)
 
+# Calculate log(earned_units) for exposure
 modelling_df <- modelling_df %>%
   mutate(log_earned_units = log(earned_units))
 
 summary(modelling_df)
 
+# Test/Train split
 train_indices <- sample(1:nrow(modelling_df), size = 0.8 * nrow(modelling_df))
 train_df <- modelling_df[train_indices, ]
 test_df <- modelling_df[-train_indices, ]
 ```
 
 ```{r}
-# Step 2: Filter the tibble to exclude claim_paid values above the 99th percentile
+# Step 2: Filter the tibble to exclude claim_paid values above the 99th percentile (outliers)
 train_df <- train_df %>%
   filter(claim_paid <= quantile(train_df$claim_paid, 0.999))
 
@@ -108,7 +111,6 @@ hist(train_df$claim_paid,
      breaks=150,
      xlab="Paid Claims",
      main="")
-
 ```
 
 # LIGHT GBM
@@ -181,6 +183,7 @@ if (run_opt == TRUE) {
 ```
 
 ```{r}
+# Test and train subset datasets for LightGBM
 train_lgbm <- lgb.Dataset(data = as.matrix(subset(train_df, select = -c(claim_paid, earned_units, log_earned_units))),
                       label = as.matrix(subset(train_df, select = claim_paid)),
                       init_score = as.matrix(subset(train_df, select = log_earned_units)),
@@ -193,9 +196,9 @@ lgbm_params <- list(objective = "gamma",
                   boosting_type = "gbdt",
                   metric = "None",
                   nthread = 8,
-                  num_leaves = 8,
+                  num_leaves = 31,
                   learning_rate = 0.1,
-                  min_data_in_leaf = 10,
+                  min_data_in_leaf = 3,
                   min_gain_to_split = 0.1) 
 
 
@@ -230,17 +233,21 @@ print(lgbm_deviance)
 ```
 
 ```{r}
+# Shapviz object
 shap_lgb_test <- shapviz(lgbm_model, X_pred = data.matrix(test_lgbm))  
 ```
 
 ```{r}
+# SHAP plot
 sv_importance(shap_lgb_test, kind = "bee")
 ```
 ```{r}
+# Importance plot
 sv_importance(shap_lgb_test, show_numbers = TRUE)
 ```
 
 ```{r}
+# Gamma deviance metric function for glms
 gamma_deviance <- function(data, lev = NULL, model = NULL) {
   gamma_deviance_val <- deviance_gamma(predicted = data$pred, actual = data$obs)
   c(Gamma_Deviance = gamma_deviance_val)
@@ -256,6 +263,7 @@ cv_ctrl <- trainControl(method = "cv",
 
 
 ```{r}
+# Cross-validate gamma glm
 gamma_cv <- train(claim_paid ~ . -earned_units + offset(log_earned_units), 
                                data = train_df, 
                                method = "glm", 
@@ -264,14 +272,7 @@ gamma_cv <- train(claim_paid ~ . -earned_units + offset(log_earned_units),
                                metric = "Gamma_Deviance")
 summary(gamma_cv)
 
-#outlierTest(gamma_cv$finalModel)
 boxcox(gamma_cv$finalModel, lambda = seq(-2, 2, 0.1))
-
-
-#vif(model$finalModel)
-
-#cooks_dist <- cooks.distance(model$finalModel)
-#plot(cooks_dist, type = "h")
 
 par(mfrow=c(2,2), mar=rep(4,4))
 plot(gamma_cv$finalModel)
@@ -283,6 +284,7 @@ plot_data <- predictions %>%
 ```
 
 ```{r}
+# GLM on training subset
 gamma_glm <- glm(claim_paid ~ . -earned_units -log_earned_units,
                    family = Gamma(link = "log"),
                    offset = log_earned_units,
@@ -294,13 +296,39 @@ par(mfrow=c(1,1))
 ```
 
 ```{r}
-final_model <- gamma_glm
+# GLM on full dataset with useful features
+feature_subset <- c("claim_paid",
+                    "nb_excess", 
+                    "nb_average_breed_size", 
+                    "owner_age_years", 
+                    "pet_age_months",
+                    "median_income",
+                    "nb_contribution",
+                    "mm_category",
+                    "log_earned_units")
 
-# Convert unseen nb_breed_trait to unknown in predictions
-prediction_df <- prediction_df %>%
-  mutate(nb_breed_trait = if_else(nb_breed_trait %in% train_df$nb_breed_trait, nb_breed_trait, "unknown"))
+subset_df <- modelling_df %>%
+  select(feature_subset)
 
-final_predictions <- predict(final_model, prediction_df, type = "response")
+prediction_subset_df <- prediction_df %>%
+  select(feature_subset)
+
+final_model <- glm(claim_paid ~ . -log_earned_units,
+                   family = Gamma(link = "log"),
+                   offset = log_earned_units,
+                   data = subset_df)
+
+summary(final_model)
+par(mfrow=c(2,2))
+plot(final_model)
+par(mfrow=c(1,1))
+
+deviance_gamma(actual=subset_df$claim_paid, predicted = predict(final_model, subset_df, type="response"))
+```
+
+```{r}
+# Generate and save final predictions
+final_predictions <- predict(final_model, prediction_subset_df, type="response")
 
 prediction_data <- prediction_data %>%
   mutate(predicted_claim_paid = final_predictions)
@@ -309,16 +337,10 @@ write_csv(prediction_data, '../data/transformed/severity_predictions.csv')
 ```
 
 ```{r}
+# Check for missing predictions
 prediction_data %>% filter(is.na(predicted_claim_paid))
 ```
 
 
-```{r}
-ggplot(plot_data, aes(x = value, fill = type)) +
-  geom_histogram(position = "identity", bins = 30, alpha = 0.9) +
-  scale_fill_manual(values = c("obs" = "red", "pred" = "green")) +
-  labs(x = "Value", y = "Frequency", 
-       title = "Overlapping Histograms of Predicted vs Actual Values") +
-  theme_minimal()
-```
+
 

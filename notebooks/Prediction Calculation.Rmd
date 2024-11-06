@@ -14,9 +14,8 @@ library("tidyverse")
 ```
 
 
-## Read Data
-
 ```{r}
+# Read data
 frequency_predictions <- read_csv('../data/transformed/frequency_predictions.csv', col_names = TRUE)
 
 severity_predictions <- read_csv('../data/transformed/severity_predictions.csv', col_names = TRUE)
@@ -25,16 +24,19 @@ prediction_data <- read_csv('../data/internal/New_Customers_Pricing_Output_File.
 ```
 
 ```{r}
+# Assign loss ratio
 loss_ratio = 0.8
 
+# Calculate full month premiums
 prediction_df <- frequency_predictions %>%
   mutate(predicted_claim_paid = severity_predictions$predicted_claim_paid,
          predicted_claim_cost = predicted_claim_count * predicted_claim_paid,
-         Full_month_premium = predicted_claim_cost / 0.8)
+         Full_month_premium = predicted_claim_cost / loss_ratio)
 
 ```
 
 ```{r}
+# Attach premiums back to original submission file without cats
 prediction_data <- prediction_data %>%
   filter(!(nb_breed_trait %in% c("siamese", "forest cat", "spotted cats", "persian", "burmese")))
 
@@ -43,6 +45,7 @@ prediction_data <- prediction_data %>%
 ```
 
 ```{r}
+# Write file
 write_csv(prediction_data, '../data/SUBMISSION_New_Customers_Pricing_Output_File.csv')
 ```
 
