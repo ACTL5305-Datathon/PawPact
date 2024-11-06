@@ -332,6 +332,11 @@ sv_waterfall(shap_lgb_pred, row_id = 2)
 ```
 
 
+```{r}
+prediction_data %>% filter(is.na(predicted_claim_count))
+```
+
+
 
 
 

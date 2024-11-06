@@ -10,22 +10,24 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r}
-library(pacman)
-pacman::p_load(tidyverse,
-               scales,
-               MLmetrics,
-               ModelMetrics,
-               MetricsWeighted,
-               gridExtra,
-               caret,
-               lightgbm,
-               glmnet,
-               statmod,
-               car,
-               shapviz,
-               kernelshap,
-	       	   MASS)
-	       	   
+library("tidyverse")
+library(scales)
+library(MLmetrics)
+library(ModelMetrics)
+library(MetricsWeighted)
+library(gridExtra)
+library(caret)
+library(lightgbm)
+library(glmnet)
+library(statmod)
+library(mgcv)
+library(splines)
+library(Metrics)
+library(shapviz)
+library(kernelshap)
+library(MASS)
+
+select <- dplyr::select
 set.seed(5459538)
 ```
 
@@ -57,8 +59,10 @@ modelling_features <- c("claim_paid",
                          "quote_time_group", 
                          "earned_units", 
                          "mm_category")
+
 # Select the features we want
-modelling_df <- severity_df %>% select(modelling_features)
+modelling_df <- severity_df %>%
+  select(modelling_features)
 
 prediction_df <- prediction_data %>%
   mutate(claim_paid = NA,
@@ -303,6 +307,11 @@ prediction_data <- prediction_data %>%
 
 write_csv(prediction_data, '../data/transformed/severity_predictions.csv')
 ```
+
+```{r}
+prediction_data %>% filter(is.na(predicted_claim_paid))
+```
+
 
 ```{r}
 ggplot(plot_data, aes(x = value, fill = type)) +

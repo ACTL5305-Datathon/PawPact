@@ -144,6 +144,8 @@ density_data <- read_csv('../data/external/MMM areas classification.csv') %>%
 earned_data <- left_join(earned_data, density_data, by = c("nb_suburb", "nb_postcode", "nb_state"))
 ```
 
+
+
 # Join Income Data
 ```{r}
 income_data <-read_csv('../data/external/Median Income.csv') %>% rename(median_income = `Median total income($)`)
@@ -154,11 +156,11 @@ earned_data <- income_data %>% select("nb_postcode", "nb_suburb", "nb_state", "m
   right_join(earned_data, by = c("nb_suburb", "nb_postcode", "nb_state"))
 
 income_df <- income_data %>%
-  group_by(SA3) %>%
+  group_by(nb_state) %>%
   summarise(imputed_median_income = median(median_income, na.rm = TRUE))
 
 earned_data <- earned_data %>%
-  left_join(income_df, by="SA3") %>%
+  left_join(income_df, by="nb_state") %>%
     mutate(median_income = coalesce(median_income, imputed_median_income)) %>%
   select(-imputed_median_income)
 ```
@@ -166,13 +168,13 @@ earned_data <- earned_data %>%
 ```{r}
 prediction_df <- earned_data %>%
   filter(train_flag == FALSE) %>%
+  mutate(mm_category = coalesce(mm_category, 1)) %>%
   select(-train_flag)
 
 earned_data <- earned_data %>%
   filter(train_flag == TRUE) %>%
   select(-train_flag)
 ```
-
 
 # Frequency Data
 

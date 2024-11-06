@@ -1,0 +1,55 @@
+---
+title: "Modelling"
+author: "Helitha Dharmadasa - z5451805"
+date: "2024-10-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library("tidyverse")
+```
+
+
+## Read Data
+
+```{r}
+frequency_predictions <- read_csv('../data/transformed/frequency_predictions.csv', col_names = TRUE)
+
+severity_predictions <- read_csv('../data/transformed/severity_predictions.csv', col_names = TRUE)
+```
+
+```{r}
+prediction_df <- frequency_predictions %>%
+  mutate(predicted_claim_paid = severity_predictions$predicted_claim_paid,
+         predicted_claim_cost = predicted_claim_count * predicted_claim_paid)
+
+mean(prediction_df$predicted_claim_cost)
+```
+
+```{r}
+prediction_df %>% filter(is.na(predicted_claim_cost))
+```
+
+
+```{r}
+test <- read_csv('../data/internal/UNSW_claims_data.csv', col_names = TRUE)
+
+median(test$claim_paid)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
