@@ -23,8 +23,9 @@ pacman::p_load(tidyverse,
                statmod,
                car,
                shapviz,
-               kernelshap)
-
+               kernelshap,
+	       	   MASS)
+	       	   
 set.seed(5459538)
 ```
 
@@ -64,7 +65,7 @@ prediction_df <- prediction_data %>%
          log_earned_units = log(earned_units)) %>%
   select(c(modelling_features, "log_earned_units"))
 
-# Encode catrgorical vars as factors
+# Encode categorical vars as factors
 categorical_features <- c("pet_gender", 
                           "pet_de_sexed_age", 
                           "pet_is_switcher", 
@@ -117,9 +118,9 @@ train_lgbm_full <- lgb.Dataset(data = as.matrix(subset(modelling_df, select = -c
 # Custom metric function for LightGBM for poisson deviance
 gamma_deviance_lgbm <- function(preds,dtrain){
   labels <- get_field(dtrain, "label")
-  gamma_devaince_val <- deviance_gamma(predicted = preds, actual = labels)
+  gamma_deviance_val <- deviance_gamma(predicted = preds, actual = labels)
   
-  return(list(name="gamma_deviance",value=gamma_devaince_val,higher_better=FALSE))
+  return(list(name="gamma_deviance",value=gamma_deviance_val,higher_better=FALSE))
 }
 ```
 
@@ -259,6 +260,10 @@ gamma_cv <- train(claim_paid ~ . -earned_units + offset(log_earned_units),
                                metric = "Gamma_Deviance")
 summary(gamma_cv)
 
+#outlierTest(gamma_cv$finalModel)
+boxcox(gamma_cv$finalModel, lambda = seq(-2, 2, 0.1))
+
+
 #vif(model$finalModel)
 
 #cooks_dist <- cooks.distance(model$finalModel)
@@ -267,6 +272,7 @@ summary(gamma_cv)
 par(mfrow=c(2,2), mar=rep(4,4))
 plot(gamma_cv$finalModel)
 par(mfrow=c(1,1))
+
 predictions <- gamma_cv$pred
 plot_data <- predictions %>%
   pivot_longer(cols = c(obs, pred), names_to = "type", values_to = "value")
@@ -282,38 +288,15 @@ par(mfrow=c(2,2))
 plot(gamma_glm)
 par(mfrow=c(1,1))
 ```
+
 ```{r}
-feature_subset <- c("claim_paid",
-                    "nb_excess", 
-                    "nb_average_breed_size", 
-                    "owner_age_years", 
-                    "pet_age_months",
-                    "median_income",
-                    "nb_contribution",
-                    "mm_category",
-                    "log_earned_units")
+final_model <- gamma_glm
 
-subset_df <- modelling_df %>%
-  select(feature_subset)
+# Convert unseen nb_breed_trait to unknown in predictions
+prediction_df <- prediction_df %>%
+  mutate(nb_breed_trait = if_else(nb_breed_trait %in% train_df$nb_breed_trait, nb_breed_trait, "unknown"))
 
-prediction_subset_df <- prediction_df %>%
-  select(feature_subset)
-
-final_model <- glm(claim_paid ~ . -log_earned_units,
-                   family = Gamma(link = "log"),
-                   offset = log_earned_units,
-                   data = subset_df)
-
-summary(final_model)
-par(mfrow=c(2,2))
-plot(final_model)
-par(mfrow=c(1,1))
-
-deviance_gamma(actual=subset_df$claim_paid, predicted = predict(final_model, subset_df, type="response"))
-
-```
-```{r}
-final_predictions <- predict(final_model, prediction_subset_df, type="response")
+final_predictions <- predict(final_model, prediction_df, type = "response")
 
 prediction_data <- prediction_data %>%
   mutate(predicted_claim_paid = final_predictions)
@@ -321,5 +304,12 @@ prediction_data <- prediction_data %>%
 write_csv(prediction_data, '../data/transformed/severity_predictions.csv')
 ```
 
+```{r}
+ggplot(plot_data, aes(x = value, fill = type)) +
+  geom_histogram(position = "identity", bins = 30, alpha = 0.9) +
+  scale_fill_manual(values = c("obs" = "red", "pred" = "green")) +
+  labs(x = "Value", y = "Frequency", 
+       title = "Overlapping Histograms of Predicted vs Actual Values") +
+  theme_minimal()
+```
 
-`
