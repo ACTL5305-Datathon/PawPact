@@ -261,15 +261,79 @@ glm_deviance <- deviance_poisson(predicted = glm_test_predictions, actual = test
 print(glm_deviance)
 ```
 ```{r}
-final_model <- poisson_glm
+feature_subset <- c("claim_count",
+                    "nb_excess", 
+                    "nb_average_breed_size", 
+                    "owner_age_years", 
+                    "pet_age_months",
+                    "median_income",
+                    "nb_contribution",
+                    "mm_category",
+                    "log_earned_units")
 
-final_predictions <- predict(final_model, prediction_df, type = "response")
+categorical_features_subset <- intersect(feature_subset, categorical_features)
+
+subset_df <- modelling_df %>%
+  select(feature_subset)
+
+subset_prediction_df <- prediction_df %>%
+  select(feature_subset)
+
+# Light GBM needs data formated slightly differently, using provided lgb.Dataset.
+subset_lgbm_full <- lgb.Dataset(data = as.matrix(subset(subset_df, select = -c(claim_count, log_earned_units))),
+                      label = as.matrix(subset(subset_df, select = claim_count)),
+                      init_score = as.matrix(subset(subset_df, select = log_earned_units)),
+                      categorical_feature = categorical_features_subset)
+
+subset_prediction_lgbm <- as.matrix(subset(subset_prediction_df, select = -c(claim_count, log_earned_units)))
+
+
+```
+
+```{r}
+# Cross Validate Light GBM.
+lgbm_cv <- lgb.cv(params = lgbm_params,
+                  data = train_lgbm,
+                  eval=poisson_deviance_lgbm,
+                  nrounds = 500,
+                  nfold = 10, 
+                  verbose = -1) 
+
+# Fit Light GBM with optimal rounds from CV.
+final_model <- lgb.train(params = lgbm_params,
+                         data = subset_lgbm_full,
+                         nrounds = lgbm_cv$best_iter,
+                         verbose = -1)
+
+```
+
+```{r}
+# Convert unseen nb_breed_trait to unknown in predictions
+#prediction_df <- prediction_df %>%
+#  mutate(nb_breed_trait = if_else(nb_breed_trait %in% train_df$nb_breed_trait, nb_breed_trait, "unknown"))
+
+final_predictions <- predict(final_model, subset_prediction_lgbm)
 
 prediction_data <- prediction_data %>%
   mutate(predicted_claim_count = final_predictions)
 
 write_csv(prediction_data, '../data/transformed/frequency_predictions.csv')
 ```
+
+```{r}
+shap_lgb_pred <- shapviz(final_model, X_pred = data.matrix(subset_prediction_lgbm))  
+
+sv_waterfall(shap_lgb_pred, row_id = 1)
+```
+```{r}
+sv_waterfall(shap_lgb_pred, row_id = 2)
+```
+
+
+
+
+
+
 
 
 

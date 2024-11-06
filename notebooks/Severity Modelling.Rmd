@@ -280,23 +280,44 @@ par(mfrow=c(2,2))
 plot(gamma_glm)
 par(mfrow=c(1,1))
 ```
-
 ```{r}
-final_model <- gamma_glm
+feature_subset <- c("claim_paid",
+                    "nb_excess", 
+                    "nb_average_breed_size", 
+                    "owner_age_years", 
+                    "pet_age_months",
+                    "median_income",
+                    "nb_contribution",
+                    "mm_category",
+                    "log_earned_units")
 
-# Convert unseen nb_breed_trait to unknown in predictions
-prediction_df <- prediction_df %>%
-  mutate(nb_breed_trait = if_else(nb_breed_trait %in% train_df$nb_breed_trait, nb_breed_trait, "unknown"))
+subset_df <- modelling_df %>%
+  select(feature_subset)
 
-final_predictions <- predict(final_model, prediction_df, type = "response")
+prediction_subset_df <- prediction_df %>%
+  select(feature_subset)
+
+final_model <- glm(claim_paid ~ . -log_earned_units,
+                   family = Gamma(link = "log"),
+                   offset = log_earned_units,
+                   data = subset_df)
+
+summary(final_model)
+par(mfrow=c(2,2))
+plot(final_model)
+par(mfrow=c(1,1))
+
+deviance_gamma(actual=subset_df$claim_paid, predicted = predict(final_model, subset_df, type="response"))
+
+```
+```{r}
+final_predictions <- predict(final_model, prediction_subset_df, type="response")
 
 prediction_data <- prediction_data %>%
   mutate(predicted_claim_paid = final_predictions)
 
 write_csv(prediction_data, '../data/transformed/severity_predictions.csv')
 ```
-
-
 
 
 `
