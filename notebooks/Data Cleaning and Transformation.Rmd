@@ -220,7 +220,7 @@ write_csv(severity_df, "../data/transformed/severity.csv")
 
 write_csv(joint_df, "../data/transformed/joint.csv")
 
-write_csv(joint_df, "../data/transformed/prediction.csv")
+write_csv(prediction_df, "../data/transformed/prediction.csv")
 ```
 
 ```{r}
